@@ -198,70 +198,13 @@ PYTHON_AI_URL=http://127.0.0.1:5000
 - `NEXT_PUBLIC_SITE_URL` is used in auth redirects.
 - `PYTHON_AI_URL` points to the AI microservice that generates quizzes and grades answers.
 
-## Getting started
+## Snapshots
 
-### 1) Install dependencies
-
-```bash
-npm install
-```
-
-### 2) Prepare the database
-
-```bash
-npm run db:generate
-npm run db:push
-```
-
-If you use migrations:
-
-```bash
-npm run db:migrate
-```
-
-### 3) Seed sample data
-
-```bash
-npm run db:seed
-```
-
-### 4) Run the app
-
-```bash
-npm run dev
-```
-
-Open the app at `http://localhost:3000`.
-
-## Available scripts
-
-- `npm run dev` – start the development server
-- `npm run build` – generate Prisma client and build the app
-- `npm run start` – run the production server
-- `npm run lint` – run ESLint
-- `npm run db:generate` – generate Prisma client
-- `npm run db:push` – push schema changes to the database
-- `npm run db:migrate` – create and apply a migration
-- `npm run db:seed` – seed starter data
-- `npm run db:test` – run the database test script
-- `npm run db:studio` – open Prisma Studio
-
-## Implementation notes
-
-- Auth is handled through **Supabase SSR** helpers and protected routes.
-- Quiz generation and essay grading are delegated to a Python AI API.
-- Prisma persists quizzes, sessions, participants, and response data in PostgreSQL.
-- The dashboard uses session state, streaks, credits, and report pages to create a more engaging learning loop.
-
-## Good fit use cases
-
-- Classroom quiz creation from lecture notes, readings, or screenshots
-- Homework assignments with deadlines and progress tracking
-- Live review games for competitive classroom sessions
-- Practice mode for self-study and revision
-- Analytics for identifying common misconceptions after a session
-
-## License
-
-No license file is included yet. Add one before publishing publicly if you want to define reuse terms.
-
+<img width="1916" height="911" alt="Screenshot 2026-10-13 205347" src="https://github.com/user-attachments/assets/1f7f5e7f-df6e-44c2-ac17-d302b8c83da0" />
+<img width="1919" height="911" alt="Screenshot 2026-10-13 205402" src="https://github.com/user-attachments/assets/384f0a49-499a-4dfd-b60e-537c36fb4a1b" />
+<img width="1919" height="910" alt="Screenshot 2026-10-13 205434" src="https://github.com/user-attachments/assets/5ac1dd58-0b26-4f26-9aa5-ca71a1b34ee9" />
+<img width="1919" height="910" alt="Screenshot 2026-10-13 205504" src="https://github.com/user-attachments/assets/17ac724a-5698-481c-bc87-a047d1732fab" />
+<img width="1919" height="912" alt="Screenshot 2026-10-13 205527" src="https://github.com/user-attachments/assets/417e70d5-2b52-4832-bfa9-8a578c9c64dd" />
+<img width="1919" height="910" alt="Screenshot 2026-10-13 205548" src="https://github.com/user-attachments/assets/0211537c-cacd-48c6-bfde-2bdaf0dc5ff9" />
+<img width="1919" height="911" alt="Screenshot 2026-10-13 213233" src="https://github.com/user-attachments/assets/f88852c8-70fc-47d1-98e7-64daafe1192f" />
+<img width="1919" height="910" alt="Screenshot 2026-10-13 213301" src="https://github.com/user-attachments/assets/b1a74dce-f8ca-431d-8302-b8c676d2752b" />
