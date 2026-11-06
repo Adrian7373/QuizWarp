@@ -1,14 +1,18 @@
 "use client"
 
 import { useState, useRef } from 'react';
+import { Camera, Check, Image as ImageIcon, X } from 'lucide-react';
 
 interface ImageUploadZoneProps {
     image: File | null,
     handleUploadImage: (file: File) => void
     handleRemoveImage: () => void
+    /** 'legacy' keeps the original look for screens not yet on the arcade system. */
+    variant?: 'legacy' | 'arcade'
 }
 
-export default function ImageUploadZone({ image, handleUploadImage, handleRemoveImage }: ImageUploadZoneProps) {
+export default function ImageUploadZone({ image, handleUploadImage, handleRemoveImage, variant = 'legacy' }: ImageUploadZoneProps) {
+    const arcade = variant === 'arcade';
     const [isDragging, setIsDragging] = useState(false);
 
     const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -58,6 +62,21 @@ export default function ImageUploadZone({ image, handleUploadImage, handleRemove
     };
 
     // Success UI: Shown when an image is successfully selected
+        if (image && arcade) {
+        return (
+            <div className="px-notch flex h-44 w-full flex-col items-center justify-center gap-3 border-4 border-frame-strong bg-screen p-4">
+                <ImageIcon className="size-8 text-muted" aria-hidden />
+                <div className="flex max-w-full items-center gap-2">
+                    <Check className="size-5 shrink-0 text-px-lime" strokeWidth={3} aria-hidden />
+                    <span className="truncate text-lg">{image.name}</span>
+                </div>
+                <button type="button" onClick={clearImage} className="px-btn px-btn-sm px-btn-ghost">
+                    <X className="size-4" aria-hidden /> Remove
+                </button>
+            </div>
+        );
+    }
+
     if (image) {
         return (
             <div className="flex items-center justify-between w-full p-4 border rounded-t-xl bg-slate-50 border-slate-200">
@@ -100,6 +119,27 @@ export default function ImageUploadZone({ image, handleUploadImage, handleRemove
     }
 
     // Default UI: The Dropzone with Two Buttons
+    if (arcade) {
+        return (
+            <div
+                className={`px-notch flex h-44 w-full flex-col items-center justify-center border-4 border-dashed px-6 text-center ${isDragging ? 'border-px-cyan bg-raised' : 'border-frame-strong bg-screen'}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
+                <Camera className="size-8 text-px-cyan" aria-hidden />
+                <h3 className="mt-2 text-lg">Drop an image or take a photo</h3>
+                <p className="text-sm text-muted">JPEG, PNG formats</p>
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                    <button type="button" onClick={handleGalleryClick} className="px-btn px-btn-sm px-btn-ghost">Choose image</button>
+                    <button type="button" onClick={handleCameraClick} className="px-btn px-btn-sm px-btn-ghost"><Camera className="size-4" aria-hidden /> Take photo</button>
+                </div>
+                <input type="file" ref={galleryInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+                <input type="file" ref={cameraInputRef} onChange={handleFileChange} className="hidden" accept="image/*" capture="environment" />
+            </div>
+        );
+    }
+
     return (
         <div
             className={`

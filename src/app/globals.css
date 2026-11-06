@@ -1,15 +1,272 @@
 @import "tailwindcss";
 
+/* ==================================================================
+   QuizWarp arcade design system. Documented live at /designsystem.
+
+   One 16-color (4-bit) palette, indexes 0-F. Two screens:
+   - Cabinet (data-theme="dark", default): black CRT, color is light.
+   - Manual  (data-theme="light"): printed instruction card, color is ink fill.
+   ================================================================== */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  /* The palette. Never add a 17th color. */
+  --px-0: #0b0817;  /* void    */
+  --px-1: #1a1433;  /* night   */
+  --px-2: #2c2457;  /* dusk    */
+  --px-3: #5b5a8f;  /* steel   */
+  --px-4: #a9acd6;  /* fog     */
+  --px-5: #fbf8ff;  /* snow    */
+  --px-6: #f5ecd6;  /* paper   */
+  --px-7: #ff3b5c;  /* red     */
+  --px-8: #ff8a1f;  /* orange  */
+  --px-9: #ffe23d;  /* yellow  */
+  --px-a: #7dff4a;  /* lime    */
+  --px-b: #19b86a;  /* green   */
+  --px-c: #2ee6ff;  /* cyan    */
+  --px-d: #2f6bff;  /* blue    */
+  --px-e: #a24dff;  /* purple  */
+  --px-f: #ff3fd1;  /* pink    */
+
+  /* Every frame has one pixel-step cut from each corner. */
+  --notch: 4px;
+  --px-clip: polygon(
+    0 var(--notch), var(--notch) var(--notch), var(--notch) 0,
+    calc(100% - var(--notch)) 0, calc(100% - var(--notch)) var(--notch), 100% var(--notch),
+    100% calc(100% - var(--notch)), calc(100% - var(--notch)) calc(100% - var(--notch)), calc(100% - var(--notch)) 100%,
+    var(--notch) 100%, var(--notch) calc(100% - var(--notch)), 0 calc(100% - var(--notch)));
+}
+
+/* Cabinet: the default screen. */
+:root,
+[data-theme="dark"] {
+  --bg: var(--px-0);
+  --surface: var(--px-1);
+  --raised: var(--px-2);
+  --screen: var(--px-0);       /* inputs: a dark CRT well */
+  --frame: var(--px-2);        /* panel borders */
+  --frame-strong: var(--px-3); /* input borders */
+  --fg: var(--px-5);
+  --muted: var(--px-4);
+  --link: var(--px-c);
+  --title: var(--px-9);
+  --title-shadow: var(--px-f);
+}
+
+/* Manual: printed instruction card. Color appears as fills with ink outlines, never as thin text. */
+[data-theme="light"] {
+  --bg: var(--px-6);
+  --surface: var(--px-5);
+  --raised: var(--px-6);
+  --screen: var(--px-5);
+  --frame: var(--px-0);
+  --frame-strong: var(--px-0);
+  --fg: var(--px-0);
+  --muted: var(--px-3);
+  --link: var(--px-0);         /* blue on paper is only 3.8:1; paper links are underlined ink */
+  --title: var(--px-0);
+  --title-shadow: var(--px-f);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-screen: var(--screen);
+  --color-frame: var(--frame);
+  --color-frame-strong: var(--frame-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-link: var(--link);
+
+  /* Raw palette as utilities: bg-px-yellow, text-px-cyan, ... */
+  --color-px-void: var(--px-0);
+  --color-px-night: var(--px-1);
+  --color-px-dusk: var(--px-2);
+  --color-px-steel: var(--px-3);
+  --color-px-fog: var(--px-4);
+  --color-px-snow: var(--px-5);
+  --color-px-paper: var(--px-6);
+  --color-px-red: var(--px-7);
+  --color-px-orange: var(--px-8);
+  --color-px-yellow: var(--px-9);
+  --color-px-lime: var(--px-a);
+  --color-px-green: var(--px-b);
+  --color-px-cyan: var(--px-c);
+  --color-px-blue: var(--px-d);
+  --color-px-purple: var(--px-e);
+  --color-px-pink: var(--px-f);
+
+  --font-pixel: var(--font-press-start), ui-monospace, monospace;
+  --font-sans: var(--font-pixelify), ui-sans-serif, system-ui, sans-serif;
+  --font-orbitron: var(--font-orbitron), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Legacy palette, still used by screens that have not moved to the arcade system. */
 @theme {
-  /* Adds a new custom color called "brand" */
   --color-darker: #27374D;
   --color-dark: #526D82;
-  /* You can also create different shades */
   --color-light: #9DB2BF;
   --color-lighter: #DDE6ED;
   --color-white: #F8F9FA;
   --color-mint: #4ce0a3;
+}
 
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-orbitron: var(--font-orbitron), ui-sans-serif, system-ui, sans-serif;
+/* Stepped corners as a utility, for anything that is not a panel/input/button. */
+@utility px-notch {
+  clip-path: var(--px-clip);
+}
+
+/* ------------------------------------------------------------------
+   Pixel primitives
+   ------------------------------------------------------------------ */
+@layer components {
+  .px-panel {
+    clip-path: var(--px-clip);
+    background: var(--surface);
+    border: 4px solid var(--frame);
+  }
+
+  /* An input well. Focus turns the frame cyan (outlines would be clipped by the notch). */
+  .px-input {
+    clip-path: var(--px-clip);
+    background: var(--screen);
+    color: var(--fg);
+    border: 4px solid var(--frame-strong);
+    font-family: var(--font-sans);
+    font-size: 18px;
+    line-height: 1.4;
+    padding: 8px 12px;
+    outline: none;
+  }
+  .px-input::placeholder { color: var(--muted); }
+  .px-input:focus-visible { border-color: var(--px-c); outline: none; }
+
+  /* Arcade button: beveled fill, ink frame, presses in on click. Color via --btn. */
+  .px-btn {
+    clip-path: var(--px-clip);
+    --btn: var(--px-9);
+    --btn-ink: var(--px-0);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 16px;
+    background: var(--btn);
+    color: var(--btn-ink);
+    border: 4px solid var(--px-0);
+    font-family: var(--font-pixel);
+    font-size: 11px;
+    line-height: 1.3;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    box-shadow: inset -4px -4px 0 0 rgb(0 0 0 / 0.3), inset 4px 4px 0 0 rgb(255 255 255 / 0.45);
+    transition: transform 40ms steps(1), filter 80ms steps(2);
+    user-select: none;
+    white-space: nowrap;
+  }
+  .px-btn:hover { filter: brightness(1.12); }
+  .px-btn:active {
+    transform: translateY(2px);
+    box-shadow: inset 4px 4px 0 0 rgb(0 0 0 / 0.3);
+  }
+  .px-btn:focus-visible { border-color: var(--px-c); outline: none; }
+  .px-btn:disabled, .px-btn[aria-disabled="true"] {
+    --btn: var(--px-2);
+    --btn-ink: var(--px-4);
+    cursor: not-allowed;
+    filter: none;
+    transform: none;
+  }
+  .px-btn-lg { min-height: 56px; font-size: 13px; padding: 8px 22px; white-space: normal; text-align: center; }
+  .px-btn-sm { min-height: 36px; font-size: 9px; padding: 0 10px; gap: 6px; }
+
+  .px-btn-yellow { --btn: var(--px-9); }
+  .px-btn-cyan   { --btn: var(--px-c); }
+  .px-btn-pink   { --btn: var(--px-f); }
+  .px-btn-lime   { --btn: var(--px-a); }
+  .px-btn-red    { --btn: var(--px-7); }
+  .px-btn-orange { --btn: var(--px-8); }
+  .px-btn-ghost  { --btn: var(--raised); --btn-ink: var(--fg); }
+
+  /* Titles: yellow marquee with a hard pink offset on the cabinet; ink with a pink print offset on paper. */
+  .px-title {
+    font-family: var(--font-pixel);
+    color: var(--title);
+    text-shadow: 3px 3px 0 var(--title-shadow);
+    line-height: 1.4;
+    text-transform: uppercase;
+  }
+  [data-theme="dark"] .px-title {
+    text-shadow: 3px 3px 0 var(--title-shadow), 0 0 18px rgb(255 63 209 / 0.45);
+  }
+
+  /* Neon glow for small HUD text on the cabinet. Paper gets none. */
+  [data-theme="dark"] .px-glow { text-shadow: 0 0 6px currentColor; }
+
+  .px-label {
+    font-family: var(--font-pixel);
+    font-size: 10px;
+    line-height: 1.5;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .px-blink { animation: px-blink 1.1s steps(1, end) infinite; }
+  .px-sprite { image-rendering: pixelated; shape-rendering: crispEdges; }
+  .px-bob { animation: px-bob 1.2s steps(1, end) infinite; }
+  .px-hop { animation: px-hop 0.8s steps(1, end) infinite; }
+}
+
+/* Orbi's hologram: amber light that glows on the cabinet and gets an ink outline when printed on paper. */
+.px-holo {
+  filter: drop-shadow(0 0 2px rgb(255 138 31 / 0.9)) drop-shadow(0 0 8px rgb(255 226 61 / 0.45));
+}
+[data-theme="light"] .px-holo {
+  filter: drop-shadow(1px 0 0 var(--px-0)) drop-shadow(-1px 0 0 var(--px-0)) drop-shadow(0 1px 0 var(--px-0)) drop-shadow(0 -1px 0 var(--px-0));
+}
+/* Spin: HoloOrb slides a strip of frames past a one-frame window (duration and steps set inline). */
+@keyframes px-strip { to { transform: translateX(-100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .px-holo-strip { animation: none !important; } /* rests on the first frame */
+}
+
+@keyframes px-blink { 50% { visibility: hidden; } }
+@keyframes px-bob { 50% { transform: translateY(-4px); } }
+@keyframes px-hop { 50% { transform: translateY(-6px); } }
+
+/* CRT: scanlines and a soft vignette over arcade screens (wrapper has .px-crt). Paper is a printed card: none.
+   Opt-in so screens not yet on the arcade system don't get scanlines over their old light UI. */
+[data-theme="dark"] .px-crt::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.2) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 60%, rgb(0 0 0 / 0.35) 100%);
+}
+
+/* Paper rule: thin colored text fails contrast on paper (yellow is 1.2:1), so palette text colors print as ink.
+   Color on paper lives in fills: chips, buttons, answer keys. */
+[data-theme="light"] :is(.text-px-yellow, .text-px-lime, .text-px-cyan, .text-px-pink, .text-px-orange,
+  .text-px-red, .text-px-green, .text-px-purple, .text-px-blue, .text-px-fog) {
+  color: var(--px-0);
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--px-c);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

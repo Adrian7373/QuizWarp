@@ -1,6 +1,9 @@
 "use client"
-import { CircleUserRound, Cog, CreditCard, Flame, LayoutDashboard, LogOut, Menu, PanelRightClose, Plus, Settings, Sparkles } from "lucide-react";
+import { CircleUserRound, LayoutDashboard, LogOut, Loader2, Menu, Plus, Settings, X } from "lucide-react";
 import Logo from "./Logo";
+import ThemeToggle from "./arcade/ThemeToggle";
+import SoundToggle from "./arcade/SoundToggle";
+import { CoinCounter, StreakFlame } from "./arcade/Hud";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { AppUser } from "../page";
@@ -15,6 +18,8 @@ interface NavBarProps {
     activeQuizId?: string | null
     isFallback?: boolean;
 }
+
+const navLink = "flex items-center gap-3 px-2.5 py-2 text-lg text-fg hover:bg-raised";
 
 export default function NavBar({ user, activeQuizId, isFallback = false }: NavBarProps) {
     const router = useRouter();
@@ -70,63 +75,72 @@ export default function NavBar({ user, activeQuizId, isFallback = false }: NavBa
         router.refresh();
     }
 
-    return (
-        <div className="print:hidden fixed w-full bg-darker flex py-4 items-center justify-between px-4 z-50 font-inter">
-            <div className="flex gap-2 items-center">
-                <Menu onClick={toggleMenu} strokeWidth={3} className="w-10 h-10 text-white cursor-pointer" />
-                <Logo />
-            </div>
+    const quizItemClass = (isActive: boolean) =>
+        `flex w-full shrink-0 items-center gap-2 px-2.5 py-2 text-left text-base ${isActive
+            ? 'bg-raised text-fg'
+            : 'text-muted hover:bg-raised hover:text-fg'
+        }`;
 
-            {/* 3. HANDLE THE 3 STATES: Loading, Logged In, Logged Out */}
-            {isFallback ? (
-                // Loading Skeleton (Matches the shape of the Streak/Credits pill)
-                <div className="h-10 w-32 bg-slate-800 rounded-full animate-pulse border border-slate-700"></div>
-            ) : user ? (
-                // Logged In State
-                <div className="flex items-center gap-4 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
-                    <div className="flex items-center gap-1 border-r border-slate-300 pr-3">
-                        <Flame className={`w-4 h-4 ${user.currentStreak > 0 ? "text-orange-500 fill-orange-500" : "text-slate-400"}`} />
-                        <span className={`text-sm font-bold ${user.currentStreak > 0 ? "text-orange-600" : "text-slate-500"}`}>{user.currentStreak}</span>
+    return (
+        <div className="print:hidden font-sans text-fg">
+            {/* The HUD bar. Drawer and dialogs are siblings so their fixed positioning is never trapped by it. */}
+            <header className="fixed inset-x-0 top-0 z-50 border-b-4 border-frame bg-bg">
+                <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:px-6">
+                    <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                        <button type="button" onClick={toggleMenu} aria-label="Open menu" className="px-btn px-btn-sm px-btn-ghost">
+                            <Menu className="size-4" aria-hidden />
+                        </button>
+                        <Link href="/" aria-label="QuizWarp home"><Logo variant="arcade" compact /></Link>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-[#4ce0a3] fill-[#4ce0a3]/20" />
-                        <Link href={`/dashboard/settings?tab=credits`} className="text-sm font-black text-slate-700">{user.aiCredits}</Link>
+
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                        {isFallback ? (
+                            <div className="h-9 w-24 animate-pulse bg-raised px-notch" />
+                        ) : user ? (
+                            <div className="mr-1 flex items-center gap-3 sm:gap-4">
+                                <StreakFlame days={user.currentStreak} />
+                                <Link href={`/dashboard/settings?tab=credits`} className="hover:opacity-80">
+                                    <CoinCounter value={user.aiCredits} />
+                                </Link>
+                            </div>
+                        ) : (
+                            <button onClick={toggleSignIn} className="px-btn px-btn-sm px-btn-cyan">
+                                Sign in
+                            </button>
+                        )}
+                        <SoundToggle />
+                        <ThemeToggle />
                     </div>
                 </div>
-            ) : (
-                // Logged Out State
-                <button onClick={toggleSignIn} className="bg-white px-4 py-2 rounded-md font-semibold cursor-pointer hover:bg-gray-300">
-                    Sign In
-                </button>
-            )}
+            </header>
 
             <div
                 onClick={toggleMenu}
-                className={`fixed inset-0 bg-black/40 z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
-                    }`}
+                className={`fixed inset-0 z-[60] bg-px-void/70 ${isOpen ? 'visible' : 'invisible'}`}
             >
                 <aside
                     onClick={(e) => e.stopPropagation()}
-                    className={`fixed top-0 left-0 h-full bg-darker z-50 w-72 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'
-                        }`}
+                    aria-label="Menu"
+                    className={`fixed left-0 top-0 h-full w-72 border-r-4 border-frame bg-surface transition-transform duration-150 ease-[steps(4)] ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
                 >
-                    <div className="p-4 flex flex-col h-full">
+                    <div className="flex h-full flex-col p-4">
 
-                        <div className="flex justify-between items-center mb-10 shrink-0">
-                            <Logo />
-                            <PanelRightClose onClick={toggleMenu} className="-scale-x-100 w-6 h-6 text-white cursor-pointer hover:text-slate-300" />
+                        <div className="mb-6 flex shrink-0 items-center justify-between">
+                            <Logo variant="arcade" />
+                            <button type="button" onClick={toggleMenu} aria-label="Close menu" className="px-btn px-btn-sm px-btn-ghost">
+                                <X className="size-4" aria-hidden />
+                            </button>
                         </div>
 
-                        <div className="text-white flex-1 flex flex-col min-h-0 pb-4">
-                            <div className="flex flex-col py-2 gap-2 mb-6 shrink-0">
-                                <Link href="/" className="flex gap-2 w-full py-2 hover:bg-slate-800 rounded-md px-2 cursor-pointer"><Plus />New quiz</Link>
-                                <Link hidden={!user} href="/dashboard" className="flex gap-2 py-2 w-full hover:bg-slate-800 rounded-md px-2 cursor-pointer"><LayoutDashboard />Dashboard</Link>
+                        <div className="flex min-h-0 flex-1 flex-col pb-4">
+                            <div className="mb-5 flex shrink-0 flex-col gap-1">
+                                <Link href="/" className={navLink}><Plus className="size-5" aria-hidden />New quiz</Link>
+                                <Link hidden={!user} href="/dashboard" className={navLink}><LayoutDashboard className="size-5" aria-hidden />Dashboard</Link>
                             </div>
 
-                            <p className="text-gray-400 mb-2 text-sm shrink-0">Recent quizzes</p>
-                            <hr className="shrink-0 border-slate-700" />
+                            <p className="px-label mb-2 shrink-0 border-b-4 border-dashed border-frame pb-2 text-px-pink">Saved quizzes</p>
 
-                            <div className="flex flex-col flex-1 min-h-0 overflow-y-auto text-white gap-3 py-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                            <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto py-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                                 {user ? (
                                     [...user.quizzes].reverse().map((quiz) => {
                                         const isActive = pathname === `/quiz/${quiz.id}`;
@@ -136,16 +150,14 @@ export default function NavBar({ user, activeQuizId, isFallback = false }: NavBa
                                                 key={quiz.id}
                                                 href={`/quiz/${quiz.id}`}
                                                 onClick={toggleMenu}
-                                                className={`flex items-center w-full px-3 py-2.5 text-sm rounded-md transition-all group cursor-pointer border-l-4 shrink-0 ${isActive
-                                                    ? 'bg-[#4ce0a3]/10 text-[#4ce0a3] border-[#4ce0a3] font-medium'
-                                                    : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent'
-                                                    }`}
+                                                className={quizItemClass(isActive)}
                                             >
-                                                <p className="truncate select-none">{quiz.title}</p>
+                                                {isActive && <span aria-hidden className="font-pixel text-[10px] text-px-yellow">▶</span>}
+                                                <p className="select-none truncate">{quiz.title}</p>
                                             </Link>
                                         )
                                     })
-                                ) : (
+                                ) : localQuizzes.length > 0 ? (
                                     localQuizzes.map((quiz) => {
                                         const isActive = activeQuizId === quiz.id;
 
@@ -157,50 +169,46 @@ export default function NavBar({ user, activeQuizId, isFallback = false }: NavBa
                                                     // Dispatch a custom browser event containing the quiz payload
                                                     window.dispatchEvent(new CustomEvent('openLocalQuiz', { detail: quiz }));
                                                 }}
-                                                className={`flex items-center text-left w-full px-3 py-2.5 text-sm rounded-md transition-all group cursor-pointer border-l-4 shrink-0 ${isActive
-                                                    ? 'bg-[#4ce0a3]/10 text-[#4ce0a3] border-[#4ce0a3] font-medium'
-                                                    : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent'
-                                                    }`}
+                                                className={quizItemClass(isActive)}
                                             >
-                                                <p className="truncate select-none">{quiz.title}</p>
+                                                {isActive && <span aria-hidden className="font-pixel text-[10px] text-px-yellow">▶</span>}
+                                                <p className="select-none truncate">{quiz.title}</p>
                                             </button>
                                         )
                                     })
+                                ) : (
+                                    <p className="px-2.5 py-2 text-base text-muted">Quizzes you generate show up here.</p>
                                 )}
                             </div>
                         </div>
 
-
                         {!user && (
-                            <div className="flex flex-col items-center justify-center gap-2 shrink-0 mb-4">
-                                <button onClick={toggleSignIn} hidden={!!user} className="bg-white px-4 py-2 rounded-md font-semibold cursor-pointer hover:bg-gray-300">Sign In</button>
-                                <p className="text-white text-sm">Sign In to access more features</p>
+                            <div className="px-panel mb-4 flex shrink-0 flex-col gap-3 bg-raised p-3">
+                                <p className="text-base text-muted">Sign in to save quizzes, host live games and track scores.</p>
+                                <button onClick={toggleSignIn} className="px-btn px-btn-sm px-btn-cyan w-full">Sign in</button>
                             </div>
                         )}
 
-                        <div className="flex items-center justify-between px-2 mt-auto shrink-0 pb-2">
+                        <div className="mt-auto flex shrink-0 items-center justify-between border-t-4 border-frame pt-3">
                             <div className="flex items-center gap-3">
-                                <CircleUserRound className="w-8 h-8 text-white" />
-                                <div className="flex flex-col text-white">
-                                    <p className="font-semibold text-sm">{user?.name || 'Guest'}</p>
-                                    <p className="text-xs text-slate-400 capitalize">{user?.role?.toLowerCase() || 'Anonymous'}</p>
+                                <CircleUserRound className="size-8 text-muted" aria-hidden />
+                                <div className="flex flex-col">
+                                    <p className="text-base font-semibold">{user?.name || 'Guest'}</p>
+                                    <p className="px-label text-[9px] text-muted">{user?.role?.toLowerCase() || 'Player 1'}</p>
                                 </div>
                             </div>
                             {!!user && (
-                                <div className="flex gap-1 items-center">
-                                    <Link
-                                        href={"/dashboard/settings"}
-                                    >
-                                        <Settings className="text-white w-5 h-5" />
+                                <div className="flex items-center gap-1">
+                                    <Link href={"/dashboard/settings"} aria-label="Settings" className="px-btn px-btn-sm px-btn-ghost">
+                                        <Settings className="size-4" aria-hidden />
                                     </Link>
-                                    <button onClick={toggleLogout} className="text-red-400 hover:bg-slate-800 p-2 rounded-full transition-colors">
-                                        <LogOut className="w-5 h-5" />
+                                    <button onClick={toggleLogout} aria-label="Log out" className="px-btn px-btn-sm px-btn-red">
+                                        <LogOut className="size-4" aria-hidden />
                                     </button>
                                 </div>
                             )}
                         </div>
                     </div>
-
                 </aside>
             </div>
 
@@ -209,18 +217,17 @@ export default function NavBar({ user, activeQuizId, isFallback = false }: NavBa
             )}
 
             {isLoggingOut && (
-                <div onClick={toggleLogout} className='bg-black/50 z-50 fixed inset-0 flex h-dvh items-center justify-center'>
-                    <div onClick={(e) => e.stopPropagation()} className='z-[60] bg-white p-8 mx-4 max-w-sm w-full flex flex-col items-center gap-4 rounded-xl shadow-2xl'>
-                        <div className="flex flex-col items-center gap-2 text-center">
-                            <LogOut className='w-10 h-10 text-red-500' />
-                            <h2 className='text-2xl font-bold text-slate-800'>Log out?</h2>
-                            <p className="text-slate-500">Are you sure you want to log out of your account?</p>
+                <div onClick={toggleLogout} className='fixed inset-0 z-[70] flex h-dvh items-center justify-center bg-px-void/70 p-4'>
+                    <div role="dialog" aria-modal="true" aria-labelledby="logout-title" onClick={(e) => e.stopPropagation()} className='px-panel flex w-full max-w-sm flex-col gap-5 p-6'>
+                        <div className="flex flex-col gap-2">
+                            <h2 id="logout-title" className='px-title text-base'>Log out?</h2>
+                            <p className="text-lg text-muted">You can log back in anytime. Saved quizzes stay in your account.</p>
                         </div>
-                        <div className='flex gap-3 w-full mt-2'>
-                            <button onClick={toggleLogout} className='flex-1 bg-slate-100 text-slate-700 font-semibold py-3 rounded-lg hover:bg-slate-200 transition-colors'>Cancel</button>
-                            <button className='flex-1 bg-red-500 text-white font-semibold py-3 rounded-lg flex gap-2 justify-center items-center hover:bg-red-600 transition-colors' onClick={handleLogOut}>
-                                {isPending ? <Cog className="animate-spin w-5 h-5" /> : null}
-                                Confirm
+                        <div className='flex justify-end gap-2'>
+                            <button onClick={toggleLogout} className='px-btn px-btn-ghost'>Cancel</button>
+                            <button className='px-btn px-btn-red' onClick={handleLogOut}>
+                                {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                                Log out
                             </button>
                         </div>
                     </div>

@@ -403,7 +403,7 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
     };
 
     return (
-        <div className="fixed top-[72px] left-0 right-0 bottom-0 z-[40] flex flex-col bg-slate-50 font-sans overflow-hidden print:static print:h-auto print:block print:overflow-visible">
+        <div className="fixed top-16 left-0 right-0 bottom-0 z-[40] flex flex-col bg-slate-50 font-sans overflow-hidden print:static print:h-auto print:block print:overflow-visible">
             <header className="print:hidden z-40 flex px-3 sm:px-4 py-3 sm:py-4 bg-darker border-b border-slate-200 shadow-sm shrink-0 relative min-h-[72px]">
 
                 {/* Action Container: flex-wrap with uniform gap, pr-12 ensures buttons don't overlap the absolute close button on mobile */}
