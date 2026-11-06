@@ -3,22 +3,22 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { endSessionEarly } from "@/app/actions";
-import { CheckCircle2, CircleX, Loader2 } from "lucide-react";
+import { Loader2, Square } from "lucide-react";
 import toast from "react-hot-toast";
+import Dialog from "@/app/_components/arcade/Dialog";
 
 interface EndSessionButtonProps {
     sessionId: string;
     hostId: string;
+    quizTitle?: string;
 }
 
-export default function EndSessionButton({ sessionId, hostId }: EndSessionButtonProps) {
+export default function EndSessionButton({ sessionId, hostId, quizTitle }: EndSessionButtonProps) {
     const router = useRouter();
     const [isEnding, setIsEnding] = useState(false);
     const [isShowing, setIsShowing] = useState(false);
 
     const handleEndEarly = async () => {
-        // Optional: Add a confirm dialog so they don't click it by accident
-
         setIsEnding(true);
         const response = await endSessionEarly(sessionId, hostId);
 
@@ -26,7 +26,8 @@ export default function EndSessionButton({ sessionId, hostId }: EndSessionButton
             toast.error(response.error);
             setIsEnding(false);
         } else {
-            toast.success("Assignment ended successfully.");
+            toast.success("Assignment ended. Scores are in Reports.");
+            setIsShowing(false);
             // Refresh the server components to instantly move the item to the Completed tab
             router.refresh();
         }
@@ -34,40 +35,30 @@ export default function EndSessionButton({ sessionId, hostId }: EndSessionButton
 
     return (
         <>
-            <button
-                onClick={() => setIsShowing(true)}
-                disabled={isEnding}
-                className="flex-1 cursor-pointer sm:flex-none bg-rose-100 hover:bg-rose-200 text-rose-700 disabled:opacity-50 font-semibold px-4 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-                {isEnding ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                    <CheckCircle2 className="w-4 h-4" />
-                )}
-                {isEnding ? "Ending..." : "End Early"}
+            <button onClick={() => setIsShowing(true)} disabled={isEnding} className="px-btn px-btn-sm px-btn-red">
+                {isEnding ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Square className="size-3.5" fill="currentColor" aria-hidden />}
+                {isEnding ? "Ending…" : "End early"}
             </button>
 
             {isShowing && (
-                <div className="fixed bg-black/50 inset-0 z-50 flex items-center justify-center">
-                    {/* Content */}
-                    <div className="bg-white p-8 mx-8 flex flex-col gap-3 rounded-lg">
-                        <div className="flex items-center gap-2 justify-center mr-5">
-                            <CircleX className="text-red-500 h-10 w-10" />
-                            <p className="text-lg font-semibold">End Early?</p>
-                        </div>
-                        <p>Are you sure you want to <b>end</b> this session early? This action cannot be undone.</p>
-                        <div className="flex justify-center gap-4">
-                            <button onClick={() => setIsShowing(false)} className="px-8 py-3 border-1 border-gray-200 rounded-md bg-gray-100 hover:bg-gray-300 cursor-pointer">
-                                Cancel
-                            </button>
-                            <button onClick={handleEndEarly} className="px-8 py-3 rounded-md bg-red-500 text-white font-semibold cursor-pointer hover:bg-red-700">
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <Dialog
+                    title="End this assignment now?"
+                    size="sm"
+                    onClose={() => setIsShowing(false)}
+                    locked={isEnding}
+                    actions={<>
+                        <button onClick={() => setIsShowing(false)} className="px-btn px-btn-ghost">Keep it open</button>
+                        <button onClick={handleEndEarly} disabled={isEnding} className="px-btn px-btn-red">
+                            {isEnding && <Loader2 className="size-4 animate-spin" aria-hidden />}
+                            End assignment
+                        </button>
+                    </>}
+                >
+                    <p className="text-lg">
+                        Students can&apos;t play {quizTitle ? <span className="font-semibold">{quizTitle}</span> : "it"} after this, and it moves to Reports with the scores so far. This can&apos;t be undone.
+                    </p>
+                </Dialog>
             )}
-
         </>
     );
 }

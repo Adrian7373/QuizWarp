@@ -1,14 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { getActiveLiveSession } from "@/app/actions";
-import { Radio } from "lucide-react";
 import Link from "next/link";
 
 export default function ActiveLiveWidget({ userId }: { userId: string }) {
     const pathname = usePathname();
-    const router = useRouter();
     const [activeSession, setActiveSession] = useState<any>(null);
 
     useEffect(() => {
@@ -34,18 +32,14 @@ export default function ActiveLiveWidget({ userId }: { userId: string }) {
     return (
         <Link
             href={returnUrl}
-            className="fixed bottom-8 right-8 z-[100] group flex items-center gap-3 bg-slate-900 hover:bg-slate-800 text-white p-3 pr-5 rounded-full shadow-2xl transition-all hover:scale-105 border border-slate-700 animate-in slide-in-from-bottom-10"
+            className="px-panel fixed bottom-5 right-5 z-[80] flex items-center gap-3 border-px-pink py-2.5 pl-3 pr-4 font-sans text-fg hover:-translate-y-0.5"
         >
-            <div className="relative flex h-10 w-10 items-center justify-center">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-10 w-10 bg-rose-500 items-center justify-center">
-                    <Radio className="w-5 h-5 text-white" />
-                </span>
-            </div>
-            <div className="flex flex-col">
-                <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">Live Game Running</span>
-                <span className="text-sm font-semibold truncate max-w-[150px]">{activeSession.quiz.title}</span>
-            </div>
+            <span className="px-blink size-3 shrink-0 bg-px-red" aria-hidden />
+            <span className="flex flex-col leading-tight">
+                <span className="px-label text-px-pink">Live game running</span>
+                <span className="max-w-[180px] truncate text-base">{activeSession.quiz.title}</span>
+            </span>
+            <span className="px-label ml-1 text-muted">Resume</span>
         </Link>
     );
 }

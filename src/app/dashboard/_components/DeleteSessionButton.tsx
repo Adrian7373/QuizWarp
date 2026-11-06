@@ -3,21 +3,22 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { deleteGameSession } from "@/app/actions";
-import { Trash2, Loader2, CircleX } from "lucide-react";
+import { Trash2, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
+import Dialog from "@/app/_components/arcade/Dialog";
 
 interface DeleteSessionButtonProps {
     sessionId: string;
     hostId: string;
+    quizTitle?: string;
 }
 
-export default function DeleteSessionButton({ sessionId, hostId }: DeleteSessionButtonProps) {
+export default function DeleteSessionButton({ sessionId, hostId, quizTitle }: DeleteSessionButtonProps) {
     const router = useRouter();
     const [isDeleting, setIsDeleting] = useState(false);
     const [isShowing, setIsShowing] = useState(false);
 
     const handleDelete = async () => {
-
         setIsDeleting(true);
         const response = await deleteGameSession(sessionId, hostId);
 
@@ -25,7 +26,8 @@ export default function DeleteSessionButton({ sessionId, hostId }: DeleteSession
             toast.error(response.error);
             setIsDeleting(false);
         } else {
-            toast.success("Session deleted successfully.");
+            toast.success("Report deleted.");
+            setIsShowing(false);
             router.refresh();
         }
     }
@@ -35,33 +37,30 @@ export default function DeleteSessionButton({ sessionId, hostId }: DeleteSession
             <button
                 onClick={() => setIsShowing(true)}
                 disabled={isDeleting}
-                className="p-3 cursor-pointer bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center shrink-0"
-                title="Delete Session"
+                className="px-btn px-btn-sm px-btn-ghost hover:[--btn:var(--px-7)] hover:[--btn-ink:var(--px-0)]"
+                aria-label={quizTitle ? `Delete report for ${quizTitle}` : "Delete report"}
+                title="Delete report"
             >
-                {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                {isDeleting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Trash2 className="size-4" aria-hidden />}
             </button>
 
             {isShowing && (
-                <div className="fixed bg-black/50 inset-0 z-50 flex items-center justify-center">
-                    {/* Content */}
-                    <div className="bg-white p-8 mx-8 flex flex-col gap-3 rounded-lg">
-                        <div className="flex items-center gap-2 justify-center mr-5">
-                            <CircleX className="text-red-500 h-10 w-10" />
-                            <p className="text-lg font-semibold">Delete Report?</p>
-                        </div>
-                        <p>Are you sure you want to <b>delete</b> this report? This action cannot be undone.</p>
-                        <div className="flex justify-center gap-4">
-                            <button onClick={() => setIsShowing(false)} className="px-8 py-3 border-1 border-gray-200 rounded-md bg-gray-100 hover:bg-gray-300 cursor-pointer">
-                                Cancel
-                            </button>
-                            <button onClick={handleDelete} className="px-8 py-3 rounded-md bg-red-500 text-white font-semibold cursor-pointer hover:bg-red-700">
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <Dialog
+                    title="Delete this report?"
+                    size="sm"
+                    onClose={() => setIsShowing(false)}
+                    locked={isDeleting}
+                    actions={<>
+                        <button onClick={() => setIsShowing(false)} className="px-btn px-btn-ghost">Cancel</button>
+                        <button onClick={handleDelete} disabled={isDeleting} data-sfx="wrong" className="px-btn px-btn-red">
+                            {isDeleting && <Loader2 className="size-4 animate-spin" aria-hidden />}
+                            Delete report
+                        </button>
+                    </>}
+                >
+                    <p className="text-lg">The scores and leaderboard{quizTitle ? <> for <span className="font-semibold">{quizTitle}</span></> : null} will be removed. The quiz itself stays in your Library. This can&apos;t be undone.</p>
+                </Dialog>
             )}
-
         </>
     )
 }

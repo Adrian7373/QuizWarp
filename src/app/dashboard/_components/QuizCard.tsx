@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Calendar, FileQuestion, Users } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import QuizCardActions from "./QuizCardAction"; // Adjust import name to match your exact file
+import QuizCardActions from "./QuizCardAction";
+import { DifficultyMeter, LIBRARY_COLUMNS, ROW } from "./Ledger";
 
 interface QuizCardProps {
     quiz: any;
@@ -12,59 +12,46 @@ interface QuizCardProps {
     userRole: "TEACHER" | "STUDENT";
 }
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** One quiz in the library list. */
 export default function QuizCard({ quiz, userId, userRole }: QuizCardProps) {
     // Optimistic state manager
     const [isOptimisticallyDeleted, setIsOptimisticallyDeleted] = useState(false);
 
     return (
-        <div
-            className={`group bg-white border border-slate-200 rounded-xl hover:scale-105 hover:shadow-md transition-all duration-300 flex-col overflow-hidden ${isOptimisticallyDeleted ? 'hidden' : 'flex'}`}
-        >
-            {/* Link covers the top info part */}
-            <Link href={`/quiz/${quiz.id}`} className="p-5 sm:p-6 flex flex-col flex-1 cursor-pointer">
-                <div className="flex justify-between items-start mb-4 gap-3">
-                    <h3 className="text-base sm:text-lg font-bold text-slate-800 line-clamp-2 transition-colors">
-                        {quiz.title}
-                    </h3>
-                    <span className={`px-2.5 py-1 text-xs font-semibold rounded-full shrink-0 ${quiz.difficulty === 'easy' ? 'bg-emerald-100 text-emerald-700' :
-                        quiz.difficulty === 'normal' ? 'bg-blue-100 text-blue-700' :
-                            'bg-rose-100 text-rose-700'
-                        }`}>
-                        {quiz.difficulty.charAt(0).toUpperCase() + quiz.difficulty.slice(1)}
-                    </span>
-                </div>
-
-                <p className="text-xs sm:text-sm text-slate-500 line-clamp-2 mb-6 flex-1">
-                    {quiz.description}
+        <li className={`${ROW} ${LIBRARY_COLUMNS} ${isOptimisticallyDeleted ? "hidden" : ""}`}>
+            <div className="min-w-0">
+                <Link href={`/quiz/${quiz.id}`} className="block truncate text-lg font-semibold underline-offset-4 hover:text-link hover:underline">
+                    {quiz.title}
+                </Link>
+                <p className="truncate text-base text-muted">
+                    {quiz.description ? `${quiz.description} ` : ""}
+                    <span className="whitespace-nowrap">Made {formatDistanceToNow(new Date(quiz.createdAt), { addSuffix: true })}</span>
                 </p>
-
-                <div className="flex items-center gap-3 sm:gap-4 text-xs font-medium text-slate-400 border-t border-slate-100 pt-4">
-                    <div className="flex items-center gap-1.5 shrink-0">
-                        <FileQuestion className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        {quiz._count.questions} Qs
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                        <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        {quiz._count.sessions} Plays
-                    </div>
-                    <div className="flex items-center gap-1.5 ml-auto shrink-0 whitespace-nowrap">
-                        <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 hidden xsm:block" />
-                        {formatDistanceToNow(new Date(quiz.createdAt), { addSuffix: true })}
-                    </div>
-                </div>
-            </Link>
-
-            {/* Action Footer */}
-            <div className="px-5 sm:px-6 py-4 bg-slate-50 border-t border-slate-100">
-                <QuizCardActions
-                    quizId={quiz.id}
-                    userId={userId}
-                    quizTitle={quiz.title}
-                    onDeleteOptimistic={() => setIsOptimisticallyDeleted(true)}
-                    onDeleteRevert={() => setIsOptimisticallyDeleted(false)}
-                    userRole={userRole}
-                />
             </div>
-        </div>
+
+            {/* One wrapped line on small screens; separate columns on lg */}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-base text-muted lg:contents">
+                <DifficultyMeter difficulty={quiz.difficulty} />
+                <span className="tabular-nums lg:text-right lg:text-fg">
+                    <span className="lg:hidden">{plural(quiz._count.questions, "question", "questions")}</span>
+                    <span className="hidden lg:inline">{quiz._count.questions}</span>
+                </span>
+                <span className="tabular-nums lg:text-right lg:text-fg">
+                    <span className="lg:hidden">{plural(quiz._count.sessions, "play", "plays")}</span>
+                    <span className="hidden lg:inline">{quiz._count.sessions}</span>
+                </span>
+            </div>
+
+            <QuizCardActions
+                quizId={quiz.id}
+                userId={userId}
+                quizTitle={quiz.title}
+                onDeleteOptimistic={() => setIsOptimisticallyDeleted(true)}
+                onDeleteRevert={() => setIsOptimisticallyDeleted(false)}
+                userRole={userRole}
+            />
+        </li>
     );
 }

@@ -5,6 +5,7 @@ import { processLoginRewards } from "../actions";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import confetti from "canvas-confetti"
+import { playSfx } from "@/app/_components/arcade/sfx"
 
 export default function RewardTracker({ userId }: { userId: string }) {
     const hasRun = useRef(false);
@@ -14,8 +15,8 @@ export default function RewardTracker({ userId }: { userId: string }) {
         const duration = 2000;
         const end = Date.now() + duration;
 
-        // Use your app's brand colors (Green and Orange)
-        const colors = ['#3bc48b', '#f97316'];
+        // Arcade palette: yellow, pink, cyan, lime (see /designsystem). Square pixel confetti.
+        const colors = ['#ffe23d', '#ff3fd1', '#2ee6ff', '#7dff4a'];
 
         (function frame() {
             confetti({
@@ -23,14 +24,16 @@ export default function RewardTracker({ userId }: { userId: string }) {
                 angle: 60,
                 spread: 55,
                 origin: { x: 0 },
-                colors: colors
+                colors: colors,
+                shapes: ['square']
             });
             confetti({
                 particleCount: 5,
                 angle: 120,
                 spread: 55,
                 origin: { x: 1 },
-                colors: colors
+                colors: colors,
+                shapes: ['square']
             });
 
             if (Date.now() < end) {
@@ -63,11 +66,13 @@ export default function RewardTracker({ userId }: { userId: string }) {
                     }
 
                     // Show the toast with a dynamic icon based on the best reward
+                    if (streak <= 0) playSfx("coin");
                     toast.success(toastMessage.trim(), {
                         duration: 3000,
                     });
 
                     if (streak > 0) {
+                        playSfx("levelup");
                         triggerConfetti();
                     }
 

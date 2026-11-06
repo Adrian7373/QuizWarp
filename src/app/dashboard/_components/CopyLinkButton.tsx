@@ -28,15 +28,9 @@ export default function CopyLinkButton({ joinCode }: CopyLinkButtonProps) {
     };
 
     return (
-        <button
-            onClick={handleCopy}
-            className={`mt-2 flex items-center justify-center gap-1.5 w-full text-xs font-bold py-1.5 rounded-md transition-colors ${copied
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-sm"
-                }`}
-        >
-            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? "Copied!" : "Copy Link"}
+        <button onClick={handleCopy} data-sfx="coin" className="inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:text-fg hover:underline">
+            {copied ? <Check className="size-3.5 text-px-lime" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+            {copied ? "Copied" : "Copy link"}
         </button>
     );
 }

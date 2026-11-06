@@ -52,7 +52,7 @@ export default function RootLayout({
       <body className="font-sans">
         {children}
         <SfxListener />
-        <Toaster position="bottom-right" reverseOrder={false} />
+        <Toaster position="bottom-right" reverseOrder={false} toastOptions={{ className: "px-toast" }} />
       </body>
     </html>
   );

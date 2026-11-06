@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Play, Trash, CircleX, Users, Loader2, Copy, Check, BrainCircuit, BookOpen } from "lucide-react";
+import { CalendarClock, Play, Trash2, Loader2, Copy, Check, BrainCircuit, BookOpen } from "lucide-react";
 import toast from "react-hot-toast";
 import { deleteQuiz, startPracticeQuiz } from "@/app/actions";
 import { createAsyncSession, createLiveSession } from "@/app/actions/generate";
 import Link from "next/link";
-import { createPortal } from "react-dom";
+import Dialog from "@/app/_components/arcade/Dialog";
 
 interface QuizCardActionsProps {
     quizId: string;
@@ -18,13 +18,10 @@ interface QuizCardActionsProps {
     onDeleteRevert: () => void;
 }
 
+const row = "px-btn px-btn-sm";
+
 export default function QuizCardActions({ quizId, userId, quizTitle, onDeleteOptimistic, onDeleteRevert, userRole }: QuizCardActionsProps) {
     const router = useRouter();
-
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => {
-        setMounted(true);
-    }, []);
 
     //Practice State
     const [isStartingPractice, setIsStartingPractice] = useState(false);
@@ -65,6 +62,12 @@ export default function QuizCardActions({ quizId, userId, quizTitle, onDeleteOpt
         setTimeout(() => setIsCopied(false), 2000);
     };
 
+    const closeAssign = () => {
+        setIsAssigning(false);
+        setGeneratedPin("");
+        setDueDate("");
+    };
+
     const handleConfirmLiveLaunch = async () => {
         setIsCreatingLive(true);
         const finalMaxFactions = gameMode === "SOLO" ? 0 : maxFactions;
@@ -79,7 +82,7 @@ export default function QuizCardActions({ quizId, userId, quizTitle, onDeleteOpt
     };
 
     const handleDelete = async () => {
-        // A. Instantly close the modal and hide the card visually
+        // A. Instantly close the modal and hide the row visually
         setIsDeleting(false);
         onDeleteOptimistic();
 
@@ -87,7 +90,7 @@ export default function QuizCardActions({ quizId, userId, quizTitle, onDeleteOpt
         const response = await deleteQuiz(quizId, userId);
 
         if (response?.error) {
-            // C. If it fails, bring the card back and show an error
+            // C. If it fails, bring the row back and show an error
             onDeleteRevert();
             toast.error("Failed to delete quiz.");
         } else {
@@ -120,151 +123,149 @@ export default function QuizCardActions({ quizId, userId, quizTitle, onDeleteOpt
         }
     };
 
+    // Earliest allowed due time: now, in the datetime-local format.
+    const minDue = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
     return (
         <>
-            <div className="flex items-center gap-2 w-full mt-auto">
-
-
+            <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap lg:justify-end">
                 {userRole === "STUDENT" ? (
                     <>
-                        <Link
-                            href={`/study/${quizId}`}
-                            className="flex-1 flex items-center border justify-center gap-1.5 py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-colors bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                        >
-                            <BookOpen className="w-4 h-4" /> Flashcards
+                        <Link href={`/study/${quizId}`} className={`${row} px-btn-yellow`}>
+                            <BookOpen className="size-4" aria-hidden /> Study
                         </Link>
                         <button
                             onClick={(e) => { e.preventDefault(); handlePracticeLaunch(); }}
                             disabled={isStartingPractice}
-                            className="cursor-pointer flex-1 border flex items-center justify-center gap-1.5 py-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs sm:text-sm font-bold transition-colors disabled:opacity-70 border-indigo-200"
+                            data-sfx="start"
+                            className={`${row} px-btn-lime`}
                         >
-                            {isStartingPractice ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <BrainCircuit className="w-4 h-4" />
-                            )}
-                            Practice Quiz
+                            {isStartingPractice ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <BrainCircuit className="size-4" aria-hidden />}
+                            Practice
                         </button>
                     </>
                 ) : (
                     <>
-                        <button onClick={() => setIsAssigning(true)} className="flex-1 flex items-center border justify-center gap-1.5 py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-colors bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100">
-                            <CalendarClock className="w-4 h-4" /> Assign
+                        <button onClick={() => setIsLaunchingLive(true)} className={`${row} px-btn-pink`}>
+                            <Play className="size-4" fill="currentColor" aria-hidden /> Host live
                         </button>
-                        <button onClick={() => setIsLaunchingLive(true)} className="cursor-pointer flex-1 border flex items-center justify-center gap-1.5 py-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs sm:text-sm font-bold transition-colors disabled:opacity-70 border-indigo-200">
-                            <Play className="w-4 h-4" fill="currentColor" /> Live
+                        <button onClick={() => setIsAssigning(true)} className={`${row} px-btn-cyan`}>
+                            <CalendarClock className="size-4" aria-hidden /> Assign
                         </button>
                     </>
                 )}
 
-                {/* Delete button */}
                 <button
                     onClick={(e) => { e.preventDefault(); setIsDeleting(true); }}
-                    className="cursor-pointer flex items-center border border-rose-200 justify-center p-2.5 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-colors shrink-0"
-                    title="Delete Quiz"
+                    className={`${row} px-btn-ghost hover:[--btn:var(--px-7)] hover:[--btn-ink:var(--px-0)]`}
+                    aria-label={`Delete ${quizTitle}`}
+                    title="Delete quiz"
                 >
-                    <Trash className="w-4 h-4" />
+                    <Trash2 className="size-4" aria-hidden />
                 </button>
             </div>
 
+            {isDeleting && (
+                <Dialog
+                    title="Delete this quiz?"
+                    size="sm"
+                    onClose={() => setIsDeleting(false)}
+                    actions={<>
+                        <button onClick={() => setIsDeleting(false)} className="px-btn px-btn-ghost">Cancel</button>
+                        <button onClick={handleDelete} data-sfx="wrong" className="px-btn px-btn-red">Delete quiz</button>
+                    </>}
+                >
+                    <p className="text-lg"><span className="font-semibold">{quizTitle}</span> and its questions will be deleted. Past reports stay. This can&apos;t be undone.</p>
+                </Dialog>
+            )}
 
-
-            {/* --- MODALS --- */}
-            {mounted && typeof document !== 'undefined' && createPortal(
-                <>
-                    {isDeleting && (
-                        <div onClick={(e) => { e.preventDefault(); setIsDeleting(false); }} className='bg-black/50 z-50 fixed inset-0 flex h-dvh items-center justify-center animate-in fade-in duration-200 p-4 cursor-default'>
-                            <div onClick={(e) => e.stopPropagation()} className='bg-white p-6 sm:p-8 flex flex-col items-center gap-4 rounded-xl max-w-sm w-full shadow-2xl'>
-                                <div className="bg-rose-100 p-3 rounded-full mb-2">
-                                    <CircleX className='w-8 h-8 text-rose-600' />
-                                </div>
-                                <h3 className='text-xl sm:text-2xl font-bold text-slate-800 text-center'>Delete "{quizTitle}"?</h3>
-                                <p className='text-center text-slate-500 mb-4 text-sm sm:text-base'>Are you sure you want to permanently delete this quiz? This action cannot be undone.</p>
-                                <div className='flex flex-col sm:flex-row gap-3 w-full'>
-                                    <button onClick={() => setIsDeleting(false)} className='w-full sm:flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 rounded-lg transition-colors'>Cancel</button>
-                                    <button onClick={handleDelete} className='w-full sm:flex-1 bg-rose-500 hover:bg-rose-600 text-white font-semibold py-3 rounded-lg transition-colors'>Confirm Delete</button>
-                                </div>
-                            </div>
+            {isAssigning && (
+                <Dialog
+                    title={generatedPin ? "Homework is live" : "Assign as homework"}
+                    onClose={closeAssign}
+                    locked={isCreatingSession}
+                    actions={generatedPin ? (
+                        <button onClick={closeAssign} className="px-btn px-btn-ghost">Done</button>
+                    ) : (<>
+                        <button onClick={closeAssign} className="px-btn px-btn-ghost">Cancel</button>
+                        <button onClick={handleCreateAssignment} disabled={isCreatingSession || !dueDate} data-sfx="start" className="px-btn px-btn-cyan">
+                            {isCreatingSession && <Loader2 className="size-4 animate-spin" aria-hidden />}
+                            Create join PIN
+                        </button>
+                    </>)}
+                >
+                    {!generatedPin ? (
+                        <div className="space-y-4">
+                            <p className="text-lg text-muted">Students play <span className="font-semibold text-fg">{quizTitle}</span> at their own pace until the deadline. Scores land in Reports.</p>
+                            <label className="block text-base font-semibold">Due date and time
+                                <input type="datetime-local" min={minDue} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="px-input mt-1.5 w-full" />
+                            </label>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <p className="text-lg text-muted">Share this PIN or the link with your class. You can track who joined under Active assignments.</p>
+                            <p className="px-notch break-all bg-px-void px-4 py-6 text-center font-pixel text-3xl tracking-widest text-px-yellow sm:text-4xl">{generatedPin}</p>
+                            <button onClick={handleCopyLink} data-sfx="coin" className="px-btn px-btn-lg px-btn-yellow w-full">
+                                {isCopied ? <Check className="size-5" aria-hidden /> : <Copy className="size-5" aria-hidden />}
+                                {isCopied ? "Link copied" : "Copy join link"}
+                            </button>
                         </div>
                     )}
+                </Dialog>
+            )}
 
-                    {isAssigning && (
-                        <div onClick={(e) => { e.preventDefault(); !generatedPin && setIsAssigning(false); }} className='bg-black/50 z-50 fixed inset-0 flex h-dvh items-center justify-center animate-in fade-in duration-200 p-4 cursor-default'>
-                            <div onClick={(e) => e.stopPropagation()} className='z-[60] bg-white p-6 sm:p-8 flex flex-col items-center gap-4 rounded-xl shadow-2xl max-w-md w-full'>
-                                {!generatedPin ? (
-                                    <>
-                                        <div className="bg-amber-100 p-3 rounded-full mb-2">
-                                            <CalendarClock className="w-8 h-8 text-amber-600" />
-                                        </div>
-                                        <h2 className='text-xl sm:text-2xl font-bold text-slate-800 text-center'>Assign "{quizTitle}"</h2>
-                                        <p className='text-slate-500 text-center text-sm mb-2'>Students can play at their own pace until the deadline.</p>
-                                        <div className="w-full mb-4">
-                                            <label className="block text-xs sm:text-sm font-bold text-slate-700 uppercase tracking-wider mb-2">Due Date & Time</label>
-                                            <input type="datetime-local" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full p-3 sm:p-4 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-[#4ce0a3] transition-colors text-slate-700 font-medium" />
-                                        </div>
-                                        <div className='flex flex-col sm:flex-row gap-3 w-full mt-2'>
-                                            <button onClick={() => setIsAssigning(false)} className='w-full sm:flex-1 bg-slate-100 text-slate-700 font-semibold py-3 rounded-lg hover:bg-slate-200 transition-colors'>Cancel</button>
-                                            <button onClick={handleCreateAssignment} disabled={isCreatingSession} className='w-full sm:flex-1 bg-[#4ce0a3] text-slate-900 font-bold py-3 rounded-lg hover:bg-[#3bc48b] transition flex justify-center items-center'>
-                                                {isCreatingSession ? <Loader2 className="w-5 h-5 animate-spin" /> : "Create Link"}
-                                            </button>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <h2 className='text-xl sm:text-2xl font-bold text-slate-800 text-center mb-2'>Assignment Ready!</h2>
-                                        <p className='text-slate-500 text-center text-sm mb-4'>Share this PIN or link with your students.</p>
-                                        <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-6 sm:p-8 w-full text-center mb-4">
-                                            <p className="text-xs sm:text-sm font-bold text-slate-400 mb-2 tracking-widest uppercase">GAME PIN</p>
-                                            <p className="text-5xl sm:text-6xl font-black text-slate-900 tracking-widest break-all">{generatedPin}</p>
-                                        </div>
-                                        <button onClick={handleCopyLink} className={`w-full flex items-center justify-center gap-2 py-3 sm:py-4 rounded-lg font-bold text-base sm:text-lg transition-colors ${isCopied ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
-                                            {isCopied ? <Check className="w-5 h-5 sm:w-6 sm:h-6" /> : <Copy className="w-5 h-5 sm:w-6 sm:h-6" />}
-                                            {isCopied ? "Copied!" : "Copy Join Link"}
+            {isLaunchingLive && (
+                <Dialog
+                    title="Host a live game"
+                    onClose={() => setIsLaunchingLive(false)}
+                    locked={isCreatingLive}
+                    actions={<>
+                        <button onClick={() => setIsLaunchingLive(false)} className="px-btn px-btn-ghost">Cancel</button>
+                        <button onClick={handleConfirmLiveLaunch} disabled={isCreatingLive} data-sfx="start" className="px-btn px-btn-pink">
+                            {isCreatingLive && <Loader2 className="size-4 animate-spin" aria-hidden />}
+                            Open lobby
+                        </button>
+                    </>}
+                >
+                    <div className="space-y-4">
+                        <p className="text-lg text-muted">Everyone joins <span className="font-semibold text-fg">{quizTitle}</span> with a PIN and answers each question at the same time.</p>
+                        <div role="radiogroup" aria-label="Game mode" className="grid grid-cols-2 gap-2">
+                            {([["SOLO", "Solo", "Every player for themselves"], ["FACTIONS", "Teams", "Players split into factions"]] as const).map(([mode, label, hint]) => (
+                                <button
+                                    key={mode}
+                                    role="radio"
+                                    aria-checked={gameMode === mode}
+                                    data-sfx="select"
+                                    onClick={() => setGameMode(mode)}
+                                    className={`px-notch flex flex-col items-start gap-1 border-4 p-3 text-left ${gameMode === mode ? "border-px-pink bg-raised" : "border-frame-strong bg-surface hover:bg-raised"}`}
+                                >
+                                    <span className="font-pixel text-[11px]">{label}</span>
+                                    <span className="text-base text-muted">{hint}</span>
+                                </button>
+                            ))}
+                        </div>
+                        {gameMode === "FACTIONS" && (
+                            <div className="space-y-2">
+                                <p className="text-base font-semibold">Number of teams</p>
+                                <div role="radiogroup" aria-label="Number of teams" className="flex gap-2">
+                                    {[2, 3, 4, 5, 6].map((num) => (
+                                        <button
+                                            key={num}
+                                            role="radio"
+                                            aria-checked={maxFactions === num}
+                                            data-sfx="select"
+                                            onClick={() => setMaxFactions(num)}
+                                            className={`px-btn flex-1 ${maxFactions === num ? "px-btn-pink" : "px-btn-ghost"}`}
+                                        >
+                                            {num}
                                         </button>
-                                        <button onClick={() => { setIsAssigning(false); setGeneratedPin(""); setDueDate(""); }} className="mt-3 text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors">Done</button>
-                                    </>
-                                )}
+                                    ))}
+                                </div>
+                                <p className="text-base text-muted">The first {maxFactions} players to join become team leaders.</p>
                             </div>
-                        </div>
-                    )}
-
-                    {isLaunchingLive && (
-                        <div onClick={(e) => { e.preventDefault(); !isCreatingLive && setIsLaunchingLive(false); }} className='bg-black/50 z-50 fixed inset-0 flex h-dvh items-center justify-center animate-in fade-in duration-200 p-4 cursor-default'>
-                            <div onClick={(e) => e.stopPropagation()} className='z-[60] bg-white p-6 sm:p-8 flex flex-col items-center gap-4 rounded-xl shadow-2xl max-w-md w-full'>
-                                <div className="bg-indigo-50 p-3 rounded-full mb-2">
-                                    <Users className="w-8 h-8 text-indigo-500" />
-                                </div>
-                                <h2 className='text-xl sm:text-2xl font-bold text-slate-800 text-center'>Host "{quizTitle}" Live</h2>
-                                <div className="flex bg-slate-100 p-1 rounded-xl w-full mb-2">
-                                    <button onClick={() => setGameMode("SOLO")} className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all ${gameMode === "SOLO" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Solo Free-for-all</button>
-                                    <button onClick={() => setGameMode("FACTIONS")} className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all ${gameMode === "FACTIONS" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Team Factions</button>
-                                </div>
-
-                                {gameMode === "FACTIONS" ? (
-                                    <div className="w-full animate-in slide-in-from-right-4 duration-300">
-                                        <p className='text-slate-500 text-center text-sm mb-4'>How many factions? The first {maxFactions} students to join will become Faction Leaders.</p>
-                                        <div className="flex justify-between items-center bg-slate-50 p-2 rounded-2xl border-2 border-slate-100 mb-4 w-full">
-                                            {[2, 3, 4, 5, 6].map((num) => (
-                                                <button key={num} onClick={() => setMaxFactions(num)} className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl font-black text-lg transition-all ${maxFactions === num ? "bg-slate-900 text-white shadow-md scale-110" : "text-slate-400 hover:bg-slate-200 hover:text-slate-700"}`}>{num}</button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="w-full text-center py-4 animate-in slide-in-from-left-4 duration-300">
-                                        <p className='text-slate-500 text-sm'>Every student for themselves! No teams will be created.</p>
-                                    </div>
-                                )}
-                                <div className='flex flex-col sm:flex-row gap-3 w-full mt-2'>
-                                    <button onClick={() => setIsLaunchingLive(false)} className='w-full sm:flex-1 bg-slate-100 text-slate-700 font-semibold py-3 rounded-lg hover:bg-slate-200 transition-colors'>Cancel</button>
-                                    <button onClick={handleConfirmLiveLaunch} disabled={isCreatingLive} className='w-full sm:flex-1 bg-indigo-500 text-white font-bold py-3 rounded-lg hover:bg-indigo-600 transition flex justify-center items-center'>
-                                        {isCreatingLive ? <Loader2 className="w-5 h-5 animate-spin" /> : "Open Lobby"}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </>,
-                document.body
+                        )}
+                    </div>
+                </Dialog>
             )}
         </>
     );

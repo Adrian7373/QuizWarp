@@ -7,11 +7,29 @@ import { AnswerOption, QuestionCard } from '../_components/arcade/QuizBits'
 import ThemeToggle from '../_components/arcade/ThemeToggle'
 import SoundToggle from '../_components/arcade/SoundToggle'
 import SfxPreview from './SfxPreview'
+import PlayerHud from '../dashboard/_components/PlayerHud'
+import QuizRow from '../dashboard/_components/QuizCard'
+import { AssignmentRow, ReportRow } from '../dashboard/_components/SessionRows'
+import { ASSIGNMENT_COLUMNS, EmptyState, LIBRARY_COLUMNS, Ledger, REPORT_COLUMNS } from '../dashboard/_components/Ledger'
 
 export const metadata: Metadata = {
     title: 'Arcade design system | QuizWarp',
     description: 'The 16-color palette, pixel type, controls, HUD, mascots and sounds for QuizWarp.',
 }
+
+// Sample data for the dashboard section.
+const ago = (h: number) => new Date(Date.now() - h * 3_600_000)
+const SAMPLE_QUIZZES = [
+    { id: 's1', title: 'Cell biology review', description: 'Organelles, membranes and how cells make energy.', difficulty: 'normal', createdAt: ago(48), _count: { questions: 10, sessions: 4 } },
+    { id: 's2', title: 'World War II causes', description: 'Treaties, alliances and the road to 1939.', difficulty: 'hard', createdAt: ago(200), _count: { questions: 15, sessions: 1 } },
+    { id: 's3', title: 'Fractions warm-up', description: 'Adding and comparing fractions with unlike denominators.', difficulty: 'easy', createdAt: ago(500), _count: { questions: 5, sessions: 0 } },
+]
+const SAMPLE_SESSIONS = [
+    { id: 'a1', joinCode: 'QW4821', mode: 'ASYNC', createdAt: ago(30), expiresAt: ago(-6), quiz: { title: 'Cell biology review' }, _count: { participants: 18 } },
+    { id: 'a2', joinCode: 'QW7730', mode: 'ASYNC', createdAt: ago(10), expiresAt: ago(-72), quiz: { title: 'World War II causes' }, _count: { participants: 1 } },
+    { id: 'r1', joinCode: 'QW1102', mode: 'LIVE', createdAt: ago(26), expiresAt: null, quiz: { title: 'Fractions warm-up' }, _count: { participants: 24 } },
+    { id: 'r2', joinCode: 'QW0919', mode: 'ASYNC', createdAt: ago(240), expiresAt: ago(100), quiz: { title: 'Cell biology review' }, _count: { participants: 21 } },
+]
 
 const PALETTE = [
     { i: '0', name: 'Void', hex: '#0B0817', role: 'Cabinet screen, outlines, ink on paper' },
@@ -21,10 +39,10 @@ const PALETTE = [
     { i: '4', name: 'Fog', hex: '#A9ACD6', role: 'Muted text on the cabinet' },
     { i: '5', name: 'Snow', hex: '#FBF8FF', role: 'Text on the cabinet, panels on paper' },
     { i: '6', name: 'Paper', hex: '#F5ECD6', role: 'The manual page (light mode)' },
-    { i: '7', name: 'Red', hex: '#FF3B5C', role: 'Wrong answers, hearts, answer A' },
+    { i: '7', name: 'Red', hex: '#FF3B5C', role: 'Wrong answers, hearts, answer A, hard level' },
     { i: '8', name: 'Orange', hex: '#FF8A1F', role: 'Timers, streak flame, Orbi’s hologram' },
-    { i: '9', name: 'Yellow', hex: '#FFE23D', role: 'Start buttons, coins, titles, Orbi’s glints' },
-    { i: 'A', name: 'Lime', hex: '#7DFF4A', role: 'Correct answers, XP, answer D' },
+    { i: '9', name: 'Yellow', hex: '#FFE23D', role: 'Start buttons, coins, titles, normal level' },
+    { i: 'A', name: 'Lime', hex: '#7DFF4A', role: 'Correct answers, XP, answer D, easy level' },
     { i: 'B', name: 'Green', hex: '#19B86A', role: 'Lime’s shade in sprites and charts' },
     { i: 'C', name: 'Cyan', hex: '#2EE6FF', role: 'Focus, links, Volt’s visor, answer B' },
     { i: 'D', name: 'Blue', hex: '#2F6BFF', role: 'Volt’s armor, info' },
@@ -54,7 +72,7 @@ function Sub({ children }: { children: React.ReactNode }) {
 }
 
 export default function ArcadeDesignSystem() {
-    const nav = [['palette', 'Palette'], ['type', 'Type'], ['controls', 'Controls'], ['hud', 'HUD'], ['quiz', 'Quiz'], ['mascots', 'Mascots'], ['fx', 'Effects'], ['rules', 'Rules']]
+    const nav = [['palette', 'Palette'], ['type', 'Type'], ['controls', 'Controls'], ['hud', 'HUD'], ['quiz', 'Quiz'], ['mascots', 'Mascots'], ['fx', 'Effects'], ['dashboard', 'Dashboard'], ['rules', 'Rules']]
 
     return (
         <div className="px-crt min-h-dvh bg-bg font-sans text-fg">
@@ -265,6 +283,22 @@ export default function ArcadeDesignSystem() {
                             <Sub>Sounds · preview</Sub>
                             <SfxPreview />
                         </div>
+                    </div>
+                </Section>
+
+                <Section id="dashboard" title="Dashboard" intro="The dashboard is the player hub: who is playing, their coins and streak, then tabs with counts and dense lists. These are the real components with sample data, so their buttons won't do anything useful here.">
+                    <PlayerHud userId="sample" name="Maya Reyes" role="TEACHER" credits={12} streak={4} />
+                    <div className="mt-6 space-y-6">
+                        <Ledger columns={LIBRARY_COLUMNS} headers={['Quiz', 'Level', 'Questions', 'Plays', '']} right={['Questions', 'Plays']}>
+                            {SAMPLE_QUIZZES.map((q) => <QuizRow key={q.id} quiz={q} userId="sample" userRole="TEACHER" />)}
+                        </Ledger>
+                        <Ledger columns={ASSIGNMENT_COLUMNS} headers={['Join PIN', 'Quiz', 'Joined', 'Deadline', '']} right={['Joined']}>
+                            {SAMPLE_SESSIONS.slice(0, 2).map((s) => <AssignmentRow key={s.id} session={s} hostId="sample" />)}
+                        </Ledger>
+                        <Ledger columns={REPORT_COLUMNS} headers={['Quiz', 'Mode', 'Players', 'When', '']} right={['Players']}>
+                            {SAMPLE_SESSIONS.slice(2).map((s) => <ReportRow key={s.id} session={s} hostId="sample" />)}
+                        </Ledger>
+                        <EmptyState say="No homework is running. Pick a quiz in your Library and press Assign to get a join PIN." />
                     </div>
                 </Section>
 
