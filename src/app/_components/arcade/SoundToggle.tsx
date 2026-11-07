@@ -13,8 +13,13 @@ function subscribe(onChange: () => void) {
     }
 }
 
+/** Whether sound effects are on, kept in sync across toggles and tabs. */
+export function useSfxOn() {
+    return useSyncExternalStore(subscribe, isSfxOn, () => false)
+}
+
 export default function SoundToggle() {
-    const on = useSyncExternalStore(subscribe, isSfxOn, () => false)
+    const on = useSfxOn()
 
     function toggle() {
         setSfxOn(!on)

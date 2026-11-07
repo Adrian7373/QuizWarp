@@ -1,5 +1,7 @@
-import { createClient } from "@/utils/supabase/server";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { createClient } from "@/utils/supabase/server";
 import NavBar from "@/app/_components/NavBar";
 import SettingsClient from "./_components/SettingsClient";
 import { getUser } from "@/app/actions";
@@ -7,7 +9,7 @@ import { AppUser } from "@/app/page";
 import { Tab } from "./_components/SettingsClient";
 
 interface SettingsPageProps {
-    searchParams: Promise<{ tab: Tab }>
+    searchParams: Promise<{ tab?: Tab }>
 }
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
@@ -16,8 +18,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     const supabase = await createClient();
     const { data: { user: authUser } } = await supabase.auth.getUser();
 
+    // The proxy already guards /dashboard; this covers a session that expired mid-visit.
     if (!authUser) {
-        throw new Error("Please log in first.");
+        redirect("/login");
     }
 
     // Fetch full user details from Prisma
@@ -29,14 +32,15 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+        <div className="px-crt min-h-dvh bg-bg font-sans text-fg">
             <NavBar user={appUser} />
 
-            <main className="flex-1 pt-28 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto w-full pb-12">
-                <div className="mb-8">
-                    <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">Settings</h1>
-                    <p className="text-slate-500 mt-1">Manage your account preferences and configurations.</p>
-                </div>
+            <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-24 sm:px-6">
+                <Link href="/dashboard" className="inline-flex items-center gap-2 text-base text-muted underline-offset-4 hover:text-fg hover:underline">
+                    <ArrowLeft className="size-4" aria-hidden /> Dashboard
+                </Link>
+                <h1 className="px-title mt-4 text-xl sm:text-2xl">Options</h1>
+                <p className="mb-8 mt-3 text-lg text-muted">Your profile, how the game looks and sounds, and your AI credits.</p>
 
                 <SettingsClient user={appUser} initialTab={resolvedTab} />
             </main>

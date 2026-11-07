@@ -12,20 +12,29 @@ function subscribe(onChange: () => void) {
 
 const getTheme = () => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'
 
-export default function ThemeToggle() {
-    const theme = useSyncExternalStore(subscribe, getTheme, () => 'dark')
-    const next = theme === 'dark' ? 'light' : 'dark'
+export type Theme = 'light' | 'dark'
 
-    function toggle() {
-        // Suspend transitions for the instant of the switch so nothing animates through the wrong colors.
-        const freeze = document.createElement('style')
-        freeze.textContent = '*,*::before,*::after{transition:none!important}'
-        document.head.appendChild(freeze)
-        document.documentElement.dataset.theme = next
-        void getComputedStyle(document.body).opacity
-        setTimeout(() => freeze.remove(), 0)
-        try { localStorage.setItem('theme', next) } catch { /* private mode: won't persist */ }
-    }
+/** The current screen (cabinet = dark, manual = light), kept in sync with <html data-theme>. */
+export function useTheme(): Theme {
+    return useSyncExternalStore(subscribe, getTheme, () => 'dark')
+}
+
+/** Switch screens and remember the choice. */
+export function applyTheme(next: Theme) {
+    // Suspend transitions for the instant of the switch so nothing animates through the wrong colors.
+    const freeze = document.createElement('style')
+    freeze.textContent = '*,*::before,*::after{transition:none!important}'
+    document.head.appendChild(freeze)
+    document.documentElement.dataset.theme = next
+    void getComputedStyle(document.body).opacity
+    setTimeout(() => freeze.remove(), 0)
+    try { localStorage.setItem('theme', next) } catch { /* private mode: won't persist */ }
+}
+
+export default function ThemeToggle() {
+    const theme = useTheme()
+    const next: Theme = theme === 'dark' ? 'light' : 'dark'
+    const toggle = () => applyTheme(next)
 
     return (
         <button
