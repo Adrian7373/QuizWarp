@@ -283,3 +283,24 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Print: always plain black on white, whatever screen is active. No scanlines, glow or stepped corners. */
+@media print {
+  :root,
+  [data-theme] {
+    --bg: #fff;
+    --surface: #fff;
+    --raised: #fff;
+    --screen: #fff;
+    --frame: #000;
+    --frame-strong: #000;
+    --fg: #000;
+    --muted: #333;
+    --title: #000;
+    --title-shadow: transparent;
+  }
+  body { background: #fff; }
+  .px-crt::after { display: none !important; }
+  .px-panel, .px-input, .px-btn, .px-notch { clip-path: none !important; }
+  .px-title, .px-glow { text-shadow: none !important; }
+}
