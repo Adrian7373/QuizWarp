@@ -1,10 +1,13 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Music, RotateCcw, VolumeX } from "lucide-react";
+import { ArrowLeft, Check, RotateCcw } from "lucide-react";
 import { Banner, Orbi, PixelBar } from "@/app/_components/arcade/Hud";
-import { isSfxOn, playSfx } from "@/app/_components/arcade/sfx";
+import { playSfx } from "@/app/_components/arcade/sfx";
+import { isMusicOn, setMusicOn } from "@/app/_components/arcade/music";
+import MusicControl from "@/app/_components/arcade/MusicControl";
+import SoundToggle from "@/app/_components/arcade/SoundToggle";
 
 interface FlashcardClientProps {
     quizId: string;
@@ -47,69 +50,27 @@ export default function FlashcardClient({ quizId, quiz, questions }: FlashcardCl
     // Cards sent back at least once this run, for the "still learning" count and the summary.
     const [relearned, setRelearned] = useState<Set<string>>(new Set());
 
-    // Music follows the global sound setting (sound is opt-in across the arcade); M toggles it here.
-    const [isMuted, setIsMuted] = useState(true);
-    useEffect(() => { setIsMuted(!isSfxOn()); }, []);
-
     const totalQuestions = questions.length;
     const isFinished = queue.length === 0;
     const currentQuestion = queue[0];
     const cardKey = currentQuestion ? String(currentQuestion.id ?? currentQuestion.questionText) : "done";
 
-    const successSound = useRef<HTMLAudioElement | null>(null);
-    const bgMusic = useRef<HTMLAudioElement | null>(null);
-
-    useEffect(() => {
-        successSound.current = new Audio('/sounds/success.mp3');
-        successSound.current.volume = 0.6;
-
-        bgMusic.current = new Audio('/sounds/bgmusic1.mp3');
-        bgMusic.current.volume = 0.15; // soft, so it sits in the background
-        bgMusic.current.loop = true;
-
-        // Stop music when the player leaves the flashcards
-        return () => {
-            if (bgMusic.current) {
-                bgMusic.current.pause();
-                bgMusic.current.src = "";
-            }
-        };
-    }, []);
-
-    // React to the mute toggle and the finished state
-    useEffect(() => {
-        if (!bgMusic.current) return;
-        if (isMuted || isFinished) {
-            bgMusic.current.pause();
-        } else {
-            // Browsers may block autoplay until the first interaction; handleFlip retries then.
-            bgMusic.current.play().catch(() => { });
-        }
-    }, [isMuted, isFinished]);
-
-    const playSuccessSound = useCallback(() => {
-        if (successSound.current && !isMuted) {
-            successSound.current.currentTime = 0;
-            successSound.current.play().catch(() => { });
-        }
-    }, [isMuted]);
-
     // --- Actions ---
+    // Music and sound effects use the shared arcade players (MusicControl and SoundToggle in the top bar).
     const handleFlip = useCallback(() => {
         setIsFlipped(prev => !prev);
-        if (bgMusic.current && bgMusic.current.paused && !isMuted && !isFinished) {
-            bgMusic.current.play().catch(() => { });
-        }
-    }, [isMuted, isFinished]);
+        playSfx("blip");
+    }, []);
 
     const handleGotIt = useCallback(() => {
-        playSuccessSound();
+        playSfx("correct");
         setIsFlipped(false);
         setQueue(prev => prev.slice(1));
         setMasteredCount(prev => prev + 1);
-    }, [playSuccessSound]);
+    }, []);
 
     const handleReviewLater = useCallback(() => {
+        playSfx("select");
         setIsFlipped(false);
         setQueue(prev => {
             const next = [...prev];
@@ -154,28 +115,13 @@ export default function FlashcardClient({ quizId, quiz, questions }: FlashcardCl
                 e.preventDefault();
                 handleReviewLater();
             } else if (e.code === "KeyM") {
-                setIsMuted(prev => !prev);
+                setMusicOn(!isMusicOn());
             }
         };
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [isFinished, isFlipped, handleFlip, handleGotIt, handleReviewLater]);
-
-    const musicButton = (
-        <button
-            type="button"
-            onClick={() => setIsMuted(m => !m)}
-            aria-pressed={!isMuted}
-            aria-label={isMuted ? "Turn music on (M)" : "Turn music off (M)"}
-            title={isMuted ? "Music off (M)" : "Music on (M)"}
-            data-sfx="none"
-            className={`px-btn px-btn-sm ${isMuted ? "px-btn-ghost" : "px-btn-cyan"}`}
-        >
-            {isMuted ? <VolumeX className="size-4" aria-hidden /> : <Music className="size-4" aria-hidden />}
-            <span className="hidden sm:inline">Music</span>
-        </button>
-    );
 
     // --- Top bar (shared by both states) ---
     const topBar = (
@@ -186,7 +132,8 @@ export default function FlashcardClient({ quizId, quiz, questions }: FlashcardCl
             <p className="min-w-0 flex-1 truncate text-lg text-muted">
                 <span className="sr-only">Studying </span>{quiz.title}
             </p>
-            {musicButton}
+            <MusicControl track="saturday-morning-save-point" />
+            <SoundToggle />
         </header>
     );
 
@@ -246,7 +193,7 @@ export default function FlashcardClient({ quizId, quiz, questions }: FlashcardCl
                     key={`${cardKey}-${isFlipped}`}
                     onClick={handleFlip}
                     aria-label={isFlipped ? "Answer side. Flip back to the question." : "Question side. Flip to see the answer."}
-                    data-sfx="select"
+                    data-sfx="none"
                     style={{ animation: "study-flip 160ms steps(3, end)" }}
                     className={`px-panel relative flex min-h-[22rem] w-full max-w-2xl cursor-pointer flex-col items-center justify-center gap-4 px-6 py-14 text-center sm:aspect-[4/3] sm:min-h-0 sm:px-12 ${isFlipped ? "border-px-lime bg-raised" : "hover:bg-raised/60"}`}
                 >
@@ -270,7 +217,7 @@ export default function FlashcardClient({ quizId, quiz, questions }: FlashcardCl
                 <div className="flex w-full max-w-2xl flex-col gap-2 sm:flex-row">
                     {isFlipped ? (
                         <>
-                            <button onClick={handleReviewLater} data-sfx="select" className="px-btn px-btn-lg px-btn-orange sm:flex-1">
+                            <button onClick={handleReviewLater} data-sfx="none" className="px-btn px-btn-lg px-btn-orange sm:flex-1">
                                 <Key>←</Key> Still learning
                             </button>
                             <button onClick={handleGotIt} data-sfx="none" className="px-btn px-btn-lg px-btn-lime sm:flex-1">
@@ -278,7 +225,7 @@ export default function FlashcardClient({ quizId, quiz, questions }: FlashcardCl
                             </button>
                         </>
                     ) : (
-                        <button onClick={handleFlip} data-sfx="select" className="px-btn px-btn-lg px-btn-cyan w-full">
+                        <button onClick={handleFlip} data-sfx="none" className="px-btn px-btn-lg px-btn-cyan w-full">
                             Show answer <Key>Space</Key>
                         </button>
                     )}
