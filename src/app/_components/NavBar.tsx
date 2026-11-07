@@ -185,7 +185,7 @@ export default function NavBar({ user, activeQuizId, isFallback = false }: NavBa
                         {!user && (
                             <div className="px-panel mb-4 flex shrink-0 flex-col gap-3 bg-raised p-3">
                                 <p className="text-base text-muted">Sign in to save quizzes, host live games and track scores.</p>
-                                <button onClick={toggleSignIn} className="px-btn px-btn-sm px-btn-cyan w-full">Sign in</button>
+                                <button onClick={() => { setIsOpen(false); toggleSignIn(); }} className="px-btn px-btn-sm px-btn-cyan w-full">Sign in</button>
                             </div>
                         )}
 

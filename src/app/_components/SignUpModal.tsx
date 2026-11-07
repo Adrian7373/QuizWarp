@@ -43,7 +43,7 @@ export default function SignupModal({ onClose }: SignUpProps) {
     return (
         <>
             {isSigningIn ? (
-                <div onClick={onClose} className="bg-black/50 z-50 fixed inset-0 flex justify-center items-center w-full min-h-dvh">
+                <div onClick={onClose} className="bg-black/50 z-[90] fixed inset-0 flex justify-center items-center w-full min-h-dvh">
                     <div
                         onClick={(event) => event.stopPropagation()}
                         className="bg-dark p-10 flex flex-col justify-center w-full shadow-md mx-6 max-w-[500px] rounded-lg"
