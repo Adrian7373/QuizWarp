@@ -9,18 +9,17 @@ import Dialog from "@/app/_components/arcade/Dialog";
 
 interface DeleteSessionButtonProps {
     sessionId: string;
-    hostId: string;
     quizTitle?: string;
 }
 
-export default function DeleteSessionButton({ sessionId, hostId, quizTitle }: DeleteSessionButtonProps) {
+export default function DeleteSessionButton({ sessionId, quizTitle }: DeleteSessionButtonProps) {
     const router = useRouter();
     const [isDeleting, setIsDeleting] = useState(false);
     const [isShowing, setIsShowing] = useState(false);
 
     const handleDelete = async () => {
         setIsDeleting(true);
-        const response = await deleteGameSession(sessionId, hostId);
+        const response = await deleteGameSession(sessionId);
 
         if (response.error) {
             toast.error(response.error);

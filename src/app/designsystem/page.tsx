@@ -303,10 +303,10 @@ export default function ArcadeDesignSystem() {
                             {SAMPLE_QUIZZES.map((q) => <QuizRow key={q.id} quiz={q} userId="sample" userRole="TEACHER" />)}
                         </Ledger>
                         <Ledger columns={ASSIGNMENT_COLUMNS} headers={['Join PIN', 'Quiz', 'Joined', 'Deadline', '']} right={['Joined']}>
-                            {SAMPLE_SESSIONS.slice(0, 2).map((s) => <AssignmentRow key={s.id} session={s} hostId="sample" />)}
+                            {SAMPLE_SESSIONS.slice(0, 2).map((s) => <AssignmentRow key={s.id} session={s} />)}
                         </Ledger>
                         <Ledger columns={REPORT_COLUMNS} headers={['Quiz', 'Mode', 'Players', 'When', '']} right={['Players']}>
-                            {SAMPLE_SESSIONS.slice(2).map((s) => <ReportRow key={s.id} session={s} hostId="sample" />)}
+                            {SAMPLE_SESSIONS.slice(2).map((s) => <ReportRow key={s.id} session={s} />)}
                         </Ledger>
                         <EmptyState say="No homework is running. Pick a quiz in your Library and press Assign to get a join PIN." />
                     </div>

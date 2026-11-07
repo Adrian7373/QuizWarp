@@ -9,18 +9,17 @@ import Dialog from "@/app/_components/arcade/Dialog";
 
 interface EndSessionButtonProps {
     sessionId: string;
-    hostId: string;
     quizTitle?: string;
 }
 
-export default function EndSessionButton({ sessionId, hostId, quizTitle }: EndSessionButtonProps) {
+export default function EndSessionButton({ sessionId, quizTitle }: EndSessionButtonProps) {
     const router = useRouter();
     const [isEnding, setIsEnding] = useState(false);
     const [isShowing, setIsShowing] = useState(false);
 
     const handleEndEarly = async () => {
         setIsEnding(true);
-        const response = await endSessionEarly(sessionId, hostId);
+        const response = await endSessionEarly(sessionId);
 
         if (response.error) {
             toast.error(response.error);

@@ -171,7 +171,7 @@ async function TabContent({ currentTab, userId, skip, currentPage, userRole, q }
         const now = Date.now();
         return (
             <Ledger columns={ASSIGNMENT_COLUMNS} headers={["Join PIN", "Quiz", "Joined", "Deadline", ""]} right={["Joined"]}>
-                {activeSessions.map((session) => <AssignmentRow key={session.id} session={session} hostId={userId} now={now} />)}
+                {activeSessions.map((session) => <AssignmentRow key={session.id} session={session} now={now} />)}
             </Ledger>
         );
     }
@@ -190,7 +190,7 @@ async function TabContent({ currentTab, userId, skip, currentPage, userRole, q }
 
         return (
             <Ledger columns={REPORT_COLUMNS} headers={["Quiz", "Mode", "Players", "When", ""]} right={["Players"]}>
-                {completedSessions.map((session) => <ReportRow key={session.id} session={session} hostId={userId} />)}
+                {completedSessions.map((session) => <ReportRow key={session.id} session={session} />)}
             </Ledger>
         );
     }

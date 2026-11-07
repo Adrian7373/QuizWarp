@@ -104,22 +104,25 @@ export async function logOutUser() {
 
 }
 
+/** The signed-in user's id, read on the server. Server actions are public, so never trust an id sent by the client. */
+async function getSignedInUserId() {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id ?? null;
+}
+
 //For ending game sessions early
-export async function endSessionEarly(sessionId: string, hostId: string) {
+export async function endSessionEarly(sessionId: string) {
     try {
-        // 1. Verify ownership
-        const session = await prisma.gameSession.findUnique({
-            where: { id: sessionId }
-        });
+        const userId = await getSignedInUserId();
+        if (!userId) return { error: "Log in to end this session." };
 
-        if (!session) return { error: "Session not found." };
-        if (session.hostId !== hostId) return { error: "Unauthorized." };
-
-        // 2. Update status to FINISHED
-        await prisma.gameSession.update({
-            where: { id: sessionId },
+        // Scoped to the host: changes nothing if the caller doesn't own the session.
+        const { count } = await prisma.gameSession.updateMany({
+            where: { id: sessionId, hostId: userId },
             data: { status: "FINISHED" }
         });
+        if (count === 0) return { error: "Session not found." };
 
         return { success: true };
     } catch (error) {
@@ -213,21 +216,16 @@ export async function updateQuiz(quizId: string, userId: string, data: UpdateQui
 
 //Delete game session
 
-export async function deleteGameSession(sessionId: string, hostId: string) {
+export async function deleteGameSession(sessionId: string) {
     try {
-        // 1. Verify Ownership
-        const session = await prisma.gameSession.findUnique({
-            where: { id: sessionId },
-            select: { hostId: true }
-        });
+        const userId = await getSignedInUserId();
+        if (!userId) return { error: "Log in to delete this session." };
 
-        if (!session) return { error: "Session not found." };
-        if (session.hostId !== hostId) return { error: "Unauthorized." };
-
-        // 2. Delete the session
-        await prisma.gameSession.delete({
-            where: { id: sessionId }
+        // Scoped to the host: deletes nothing if the caller doesn't own the session.
+        const { count } = await prisma.gameSession.deleteMany({
+            where: { id: sessionId, hostId: userId }
         });
+        if (count === 0) return { error: "Session not found." };
 
         return { success: true };
     } catch (error) {

@@ -19,7 +19,7 @@ type SessionLike = {
 const DAY = 24 * 60 * 60 * 1000;
 const players = (n: number) => `${n} ${n === 1 ? "player" : "players"}`;
 
-export function AssignmentRow({ session, hostId, now = Date.now() }: { session: SessionLike; hostId: string; now?: number }) {
+export function AssignmentRow({ session, now = Date.now() }: { session: SessionLike; now?: number }) {
     const due = session.expiresAt ? new Date(session.expiresAt) : null;
     const dueSoon = due !== null && due.getTime() - now < DAY;
 
@@ -46,13 +46,13 @@ export function AssignmentRow({ session, hostId, now = Date.now() }: { session: 
             </span>
             <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap lg:justify-end">
                 <Link href={`/dashboard/reports/${session.id}`} className="px-btn px-btn-sm px-btn-cyan">View progress</Link>
-                <EndSessionButton sessionId={session.id} hostId={hostId} quizTitle={session.quiz.title} />
+                <EndSessionButton sessionId={session.id} quizTitle={session.quiz.title} />
             </div>
         </li>
     );
 }
 
-export function ReportRow({ session, hostId }: { session: SessionLike; hostId: string }) {
+export function ReportRow({ session }: { session: SessionLike }) {
     const live = session.mode !== "ASYNC";
     const played = new Date(session.createdAt);
 
@@ -73,7 +73,7 @@ export function ReportRow({ session, hostId }: { session: SessionLike; hostId: s
             </span>
             <div className="flex items-center gap-2 lg:justify-end">
                 <Link href={`/dashboard/reports/${session.id}`} className="px-btn px-btn-sm px-btn-cyan">View scores</Link>
-                <DeleteSessionButton sessionId={session.id} hostId={hostId} quizTitle={session.quiz.title} />
+                <DeleteSessionButton sessionId={session.id} quizTitle={session.quiz.title} />
             </div>
         </li>
     );
