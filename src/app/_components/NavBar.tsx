@@ -3,6 +3,8 @@ import { CircleUserRound, LayoutDashboard, LogOut, Loader2, Menu, Plus, Settings
 import Logo from "./Logo";
 import ThemeToggle from "./arcade/ThemeToggle";
 import SoundToggle from "./arcade/SoundToggle";
+import MusicControl from "./arcade/MusicControl";
+import type { TrackId } from "./arcade/music";
 import { CoinCounter, StreakFlame } from "./arcade/Hud";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -17,11 +19,13 @@ interface NavBarProps {
     user: AppUser | null
     activeQuizId?: string | null
     isFallback?: boolean;
+    /** Plays background music on this page, starting with this track. */
+    music?: TrackId;
 }
 
 const navLink = "flex items-center gap-3 px-2.5 py-2 text-lg text-fg hover:bg-raised";
 
-export default function NavBar({ user, activeQuizId, isFallback = false }: NavBarProps) {
+export default function NavBar({ user, activeQuizId, isFallback = false, music }: NavBarProps) {
     const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
     const [isSigningIn, setIsSigningIn] = useState(false);
@@ -108,6 +112,7 @@ export default function NavBar({ user, activeQuizId, isFallback = false }: NavBa
                                 Sign in
                             </button>
                         )}
+                        {music && <MusicControl track={music} />}
                         <SoundToggle />
                         <ThemeToggle />
                     </div>

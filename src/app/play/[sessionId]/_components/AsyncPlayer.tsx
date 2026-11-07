@@ -16,6 +16,7 @@ import Sprite from "@/app/_components/arcade/Sprite";
 import { FLAME } from "@/app/_components/arcade/sprites";
 import Dialog from "@/app/_components/arcade/Dialog";
 import SoundToggle from "@/app/_components/arcade/SoundToggle";
+import MusicControl from "@/app/_components/arcade/MusicControl";
 import ThemeToggle from "@/app/_components/arcade/ThemeToggle";
 import { playSfx } from "@/app/_components/arcade/sfx";
 import { TYPE_META, isBankType } from "@/app/dashboard/bank/_components/types";
@@ -316,6 +317,7 @@ export default function AsyncPlayer({ sessionId, quizTitle, questions, isPractic
                         <LogOut className="size-4" aria-hidden /><span className="hidden sm:inline">Exit</span>
                     </button>
                     <p className="min-w-0 flex-1 truncate px-1 text-lg text-muted">{quizTitle}</p>
+                    <MusicControl track="answer-key-afternoon" />
                     <SoundToggle />
                     <ThemeToggle />
                 </div>

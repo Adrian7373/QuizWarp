@@ -243,6 +243,8 @@
 }
 /* Spin: HoloOrb slides a strip of frames past a one-frame window (duration and steps set inline). */
 @keyframes px-strip { to { transform: translateX(-100%); } }
+/* Music equalizer bars (MusicControl) */
+@keyframes px-eq { 0% { height: 30%; } 33% { height: 100%; } 66% { height: 55%; } 100% { height: 30%; } }
 @media (prefers-reduced-motion: reduce) {
   .px-holo-strip { animation: none !important; } /* rests on the first frame */
 }

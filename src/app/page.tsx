@@ -64,7 +64,7 @@ async function AsyncNavBar() {
     if (response.user) appUser = response.user;
   }
 
-  return <NavBar user={appUser} />;
+  return <NavBar user={appUser} music="level-one-sunlight" />;
 }
 
 async function GeneratorWrapper() {
@@ -92,7 +92,7 @@ export default function Home() {
   return (
     <div className="px-crt min-h-dvh bg-bg font-sans text-fg">
 
-      <Suspense fallback={<NavBar isFallback={true} user={null} />}>
+      <Suspense fallback={<NavBar isFallback={true} user={null} music="level-one-sunlight" />}>
         <AsyncNavBar />
       </Suspense>
 

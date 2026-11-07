@@ -11,6 +11,7 @@ import { submitAndGradeEssay } from "@/app/actions";
 import { Orbi, PixelBar } from "@/app/_components/arcade/Hud";
 import HoloOrb from "@/app/_components/arcade/HoloOrb";
 import SoundToggle from "@/app/_components/arcade/SoundToggle";
+import MusicControl from "@/app/_components/arcade/MusicControl";
 import { playSfx } from "@/app/_components/arcade/sfx";
 import {
     AnswerStreak, Key, LETTERS, OptionButton, OptionResult, TimerBar, TYPE_CHIP, Verdict,
@@ -452,6 +453,7 @@ export default function LivePlayer({ sessionId, quizTitle, initialStatus, questi
             <p className="min-w-0 flex-1 truncate text-lg text-muted">
                 <span className="sr-only">Live game: </span>{quizTitle}
             </p>
+            <MusicControl track="high-score-picnic" />
             <SoundToggle />
         </header>
     );
