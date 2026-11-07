@@ -1,20 +1,23 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, BrainCircuit, Check, RotateCcw, X, Volume2, VolumeX } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Check, Music, RotateCcw, VolumeX } from "lucide-react";
+import { Banner, Orbi, PixelBar } from "@/app/_components/arcade/Hud";
+import { isSfxOn, playSfx } from "@/app/_components/arcade/sfx";
 
 interface FlashcardClientProps {
+    quizId: string;
     quiz: { title: string; description: string };
     questions: any[];
 }
 
-// Helper function to scale font size based on text length
+// Scale the card text to its length so long answers (essays) still fit the card.
 const getFontSize = (text: string) => {
-    if (!text) return "text-xl sm:text-2xl";
-    if (text.length > 200) return "text-base sm:text-lg";
-    if (text.length > 100) return "text-lg sm:text-xl";
-    return "text-2xl sm:text-3xl lg:text-4xl";
+    if (!text) return "text-2xl sm:text-3xl";
+    if (text.length > 200) return "text-lg sm:text-xl";
+    if (text.length > 100) return "text-xl sm:text-2xl";
+    return "text-2xl sm:text-4xl";
 };
 
 const shuffleArray = <T,>(array: T[]): T[] => {
@@ -26,35 +29,45 @@ const shuffleArray = <T,>(array: T[]): T[] => {
     return shuffled;
 };
 
-export default function FlashcardClient({ quiz, questions }: FlashcardClientProps) {
-    const router = useRouter();
+/** Small keyboard hint chip, hidden on touch-sized screens. */
+function Key({ children }: { children: React.ReactNode }) {
+    return (
+        <kbd className="px-notch hidden bg-px-void px-1.5 py-1 font-pixel text-[8px] text-px-snow sm:inline-block">{children}</kbd>
+    );
+}
 
-    // The Active Queue: Starts with all questions.
-    const [queue, setQueue] = useState(() => shuffleArray(questions));
+export default function FlashcardClient({ quizId, quiz, questions }: FlashcardClientProps) {
+    // The active queue: "Got it" removes a card, "Still learning" sends it to the back.
+    // Start in the given order and shuffle after mount: shuffling during render would differ
+    // between the server and the browser and break hydration.
+    const [queue, setQueue] = useState(questions);
+    useEffect(() => { setQueue(shuffleArray(questions)); }, [questions]);
     const [isFlipped, setIsFlipped] = useState(false);
     const [masteredCount, setMasteredCount] = useState(0);
+    // Cards sent back at least once this run, for the "still learning" count and the summary.
+    const [relearned, setRelearned] = useState<Set<string>>(new Set());
 
-    // --- Mute State ---
-    const [isMuted, setIsMuted] = useState(false);
+    // Music follows the global sound setting (sound is opt-in across the arcade); M toggles it here.
+    const [isMuted, setIsMuted] = useState(true);
+    useEffect(() => { setIsMuted(!isSfxOn()); }, []);
 
     const totalQuestions = questions.length;
     const isFinished = queue.length === 0;
     const currentQuestion = queue[0];
+    const cardKey = currentQuestion ? String(currentQuestion.id ?? currentQuestion.questionText) : "done";
 
     const successSound = useRef<HTMLAudioElement | null>(null);
     const bgMusic = useRef<HTMLAudioElement | null>(null);
 
     useEffect(() => {
-        // Init Success Sound
         successSound.current = new Audio('/sounds/success.mp3');
         successSound.current.volume = 0.6;
 
-        // Init Background Music
         bgMusic.current = new Audio('/sounds/bgmusic1.mp3');
-        bgMusic.current.volume = 0.15; // Keep it soft so it sits in the background
+        bgMusic.current.volume = 0.15; // soft, so it sits in the background
         bgMusic.current.loop = true;
 
-        // Cleanup: Stop music when user leaves the flashcard page
+        // Stop music when the player leaves the flashcards
         return () => {
             if (bgMusic.current) {
                 bgMusic.current.pause();
@@ -63,210 +76,217 @@ export default function FlashcardClient({ quiz, questions }: FlashcardClientProp
         };
     }, []);
 
-    // React to the Mute Button and Finished state
+    // React to the mute toggle and the finished state
     useEffect(() => {
         if (!bgMusic.current) return;
-
         if (isMuted || isFinished) {
             bgMusic.current.pause();
         } else {
-            // Try to play. If browser blocks it due to lack of interaction, catch the error silently.
-            bgMusic.current.play().catch(() => console.log("Waiting for user interaction to play BGM"));
+            // Browsers may block autoplay until the first interaction; handleFlip retries then.
+            bgMusic.current.play().catch(() => { });
         }
     }, [isMuted, isFinished]);
 
-    const playSuccessSound = () => {
+    const playSuccessSound = useCallback(() => {
         if (successSound.current && !isMuted) {
             successSound.current.currentTime = 0;
-            successSound.current.play().catch((err) => {
-                console.log("Browser prevented audio autoplay:", err);
-            });
+            successSound.current.play().catch(() => { });
         }
-    };
+    }, [isMuted]);
 
     // --- Actions ---
-    const handleFlip = () => {
+    const handleFlip = useCallback(() => {
         setIsFlipped(prev => !prev);
-
-        // If the browser blocked autoplay on page load, start it on their first click
         if (bgMusic.current && bgMusic.current.paused && !isMuted && !isFinished) {
             bgMusic.current.play().catch(() => { });
         }
-    };
+    }, [isMuted, isFinished]);
 
     const handleGotIt = useCallback(() => {
         playSuccessSound();
-
         setIsFlipped(false);
-        setTimeout(() => {
-            setQueue(prev => prev.slice(1));
-            setMasteredCount(prev => prev + 1);
-        }, 150);
-    }, [isMuted]); // Added isMuted to dependency array so the callback knows the current state
+        setQueue(prev => prev.slice(1));
+        setMasteredCount(prev => prev + 1);
+    }, [playSuccessSound]);
 
     const handleReviewLater = useCallback(() => {
         setIsFlipped(false);
-        setTimeout(() => {
-            setQueue(prev => {
-                const newQueue = [...prev];
-                const movedItem = newQueue.shift();
-                if (movedItem) newQueue.push(movedItem);
-                return newQueue;
-            });
-        }, 150);
+        setQueue(prev => {
+            const next = [...prev];
+            const moved = next.shift();
+            if (moved) {
+                next.push(moved);
+                setRelearned(r => new Set(r).add(String(moved.id ?? moved.questionText)));
+            }
+            return next;
+        });
     }, []);
 
     const handleRestart = () => {
         setQueue(shuffleArray(questions));
         setMasteredCount(0);
+        setRelearned(new Set());
         setIsFlipped(false);
     };
 
-    // --- Keyboard Shortcuts ---
+    // Level-up jingle when the deck is cleared (only if sound is on globally).
+    useEffect(() => {
+        if (isFinished && totalQuestions > 0) playSfx("levelup");
+    }, [isFinished, totalQuestions]);
+
+    // --- Keyboard: Space/Enter flip, ← still learning, → got it (after flipping), M music ---
     useEffect(() => {
         if (isFinished) return;
 
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.code === "Space") {
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            const target = e.target as HTMLElement | null;
+            // Let a focused button handle its own Space/Enter, so a flip never fires twice.
+            const onControl = !!target?.closest("button, a, input, textarea, select");
+
+            if ((e.code === "Space" || e.code === "Enter") && !onControl) {
                 e.preventDefault();
                 handleFlip();
-            } else if (e.code === "ArrowRight") {
+            } else if (e.code === "ArrowRight" && isFlipped) {
+                e.preventDefault();
                 handleGotIt();
-            } else if (e.code === "ArrowLeft") {
+            } else if (e.code === "ArrowLeft" && isFlipped) {
+                e.preventDefault();
                 handleReviewLater();
-            } else if (e.code === "KeyM") { // Bonus shortcut: Press 'M' to mute!
+            } else if (e.code === "KeyM") {
                 setIsMuted(prev => !prev);
             }
         };
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isFinished, handleGotIt, handleReviewLater]);
+    }, [isFinished, isFlipped, handleFlip, handleGotIt, handleReviewLater]);
 
-    // --- Finished State ---
+    const musicButton = (
+        <button
+            type="button"
+            onClick={() => setIsMuted(m => !m)}
+            aria-pressed={!isMuted}
+            aria-label={isMuted ? "Turn music on (M)" : "Turn music off (M)"}
+            title={isMuted ? "Music off (M)" : "Music on (M)"}
+            data-sfx="none"
+            className={`px-btn px-btn-sm ${isMuted ? "px-btn-ghost" : "px-btn-cyan"}`}
+        >
+            {isMuted ? <VolumeX className="size-4" aria-hidden /> : <Music className="size-4" aria-hidden />}
+            <span className="hidden sm:inline">Music</span>
+        </button>
+    );
+
+    // --- Top bar (shared by both states) ---
+    const topBar = (
+        <header className="flex items-center gap-3">
+            <Link href={`/quiz/${quizId}`} className="px-btn px-btn-sm px-btn-ghost" aria-label="Back to quiz">
+                <ArrowLeft className="size-4" aria-hidden /><span className="hidden sm:inline">Back to quiz</span>
+            </Link>
+            <p className="min-w-0 flex-1 truncate text-lg text-muted">
+                <span className="sr-only">Studying </span>{quiz.title}
+            </p>
+            {musicButton}
+        </header>
+    );
+
+    // --- Finished state ---
     if (isFinished) {
+        const secondLook = relearned.size;
         return (
-            <div className="flex-1 flex flex-col items-center justify-center animate-in zoom-in-95 duration-500">
-                <div className="bg-slate-800 p-6 sm:p-8 rounded-3xl border border-slate-700 text-center max-w-md w-full shadow-2xl">
-                    <div className="bg-[#4ce0a3]/20 w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <BrainCircuit className="w-8 h-8 sm:w-10 sm:h-10 text-[#4ce0a3]" />
-                    </div>
-                    <h2 className="text-2xl sm:text-3xl font-black text-white mb-2">Deck Mastered!</h2>
-                    <p className="text-sm sm:text-base text-slate-400 mb-8">You successfully reviewed all {totalQuestions} questions in <b className="text-slate-300">{quiz.title}</b>.</p>
-
-                    <div className="flex flex-col gap-3">
-                        <button onClick={handleRestart} className="w-full py-3 sm:py-4 bg-[#4ce0a3] text-slate-900 font-bold rounded-xl hover:bg-[#3bc48b] transition-colors flex justify-center items-center gap-2">
-                            <RotateCcw className="w-5 h-5" /> Study Again
+            <div className="flex flex-1 flex-col gap-8">
+                {topBar}
+                <section className="px-panel mx-auto flex w-full max-w-xl flex-col items-start gap-6 p-6 sm:p-8">
+                    <h1 className="px-title text-xl sm:text-2xl">Deck mastered</h1>
+                    <Banner title="Cleared!" detail={`${totalQuestions} of ${totalQuestions} cards`} tone="lime" />
+                    <Orbi
+                        mood="happy"
+                        say={secondLook === 0
+                            ? "Every card on the first try. Nice."
+                            : `${secondLook} ${secondLook === 1 ? "card needed" : "cards needed"} a second look. Study again to lock them in.`}
+                    />
+                    <div className="flex w-full flex-col gap-2 sm:flex-row">
+                        <button onClick={handleRestart} data-sfx="start" className="px-btn px-btn-lg px-btn-yellow sm:flex-1">
+                            <RotateCcw className="size-5" aria-hidden /> Study again
                         </button>
-                        <button onClick={() => router.back()} className="w-full py-3 sm:py-4 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 transition-colors">
-                            Exit
-                        </button>
+                        <Link href={`/quiz/${quizId}`} className="px-btn px-btn-lg px-btn-ghost sm:flex-1">Back to quiz</Link>
                     </div>
-                </div>
+                </section>
             </div>
         );
     }
 
-    // --- Active Study State ---
-    const progressPercentage = (masteredCount / totalQuestions) * 100;
+    // --- Active study state ---
+    const stillLearning = queue.filter(q => relearned.has(String(q.id ?? q.questionText))).length;
+    const face = isFlipped ? currentQuestion.correctAnswer : currentQuestion.questionText;
 
     return (
-        <div className="flex flex-col h-full">
-            {/* Header & Progress */}
-            <header className="mb-6 sm:mb-8 flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                    <button onClick={() => router.back()} className="text-slate-400 hover:text-white transition-colors flex items-center gap-2 font-semibold text-sm sm:text-base">
-                        <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> Leave
-                    </button>
+        <div className="flex flex-1 flex-col gap-5">
+            {/* A quick stepped "card flip": the new face squashes in from the middle. Rests under reduced motion. */}
+            <style>{`@keyframes study-flip { from { transform: scaleX(0.05); } to { transform: scaleX(1); } }`}</style>
 
-                    {/* Controls Container */}
-                    <div className="flex items-center gap-3 sm:gap-4">
-                        <button
-                            onClick={() => setIsMuted(!isMuted)}
-                            className="text-slate-400 hover:text-white transition-colors p-1"
-                            title="Mute sound (M)"
-                        >
-                            {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-                        </button>
+            {topBar}
 
-                        <span className="text-slate-400 font-bold text-xs sm:text-sm bg-slate-800 px-3 py-1 sm:px-4 sm:py-1.5 rounded-full">
-                            {masteredCount} / {totalQuestions} Mastered
-                        </span>
-                    </div>
+            {/* HUD */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                <div className="flex min-w-[14rem] flex-1 items-center gap-3">
+                    <span className="px-label whitespace-nowrap text-px-lime px-glow">Mastered</span>
+                    <PixelBar value={masteredCount} max={totalQuestions} segments={Math.min(totalQuestions, 20)} color="lime" label="Cards mastered" />
+                    <span className="whitespace-nowrap font-pixel text-[10px]">{masteredCount}/{totalQuestions}</span>
                 </div>
+                <p className="text-base text-muted">
+                    {queue.length} left{stillLearning > 0 && <>, <span className="text-fg">{stillLearning} still learning</span></>}
+                </p>
+            </div>
 
-                <div className="w-full bg-slate-800 rounded-full h-2 sm:h-2.5 overflow-hidden">
-                    <div
-                        className="bg-[#4ce0a3] h-full rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(76,224,163,0.5)]"
-                        style={{ width: `${progressPercentage}%` }}
-                    />
-                </div>
-            </header>
-
-            {/* The 3D Flashcard Container */}
-            <div className="flex-1 flex flex-col items-center justify-center relative perspective-[1500px]">
-
-                {/* Keyboard hints for desktop */}
-                <div className="absolute top-0 w-full text-center text-slate-500 font-medium text-sm hidden md:block">
-                    Tip: Use <kbd className="bg-slate-800 px-2 py-1 rounded text-slate-300 mx-1">Space</kbd> to flip, <kbd className="bg-slate-800 px-2 py-1 rounded text-slate-300 mx-1">Arrows</kbd> to sort, and <kbd className="bg-slate-800 px-2 py-1 rounded text-slate-300 mx-1">M</kbd> to mute.
-                </div>
-
-                <div
+            {/* The card */}
+            <div className="flex flex-1 flex-col items-center justify-center gap-5">
+                <button
+                    type="button"
+                    key={`${cardKey}-${isFlipped}`}
                     onClick={handleFlip}
-                    className="relative w-full h-[60vh] min-h-[400px] sm:h-auto sm:aspect-[4/3] max-w-2xl cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] [transform-style:preserve-3d]"
-                    style={{ transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
+                    aria-label={isFlipped ? "Answer side. Flip back to the question." : "Question side. Flip to see the answer."}
+                    data-sfx="select"
+                    style={{ animation: "study-flip 160ms steps(3, end)" }}
+                    className={`px-panel relative flex min-h-[22rem] w-full max-w-2xl cursor-pointer flex-col items-center justify-center gap-4 px-6 py-14 text-center sm:aspect-[4/3] sm:min-h-0 sm:px-12 ${isFlipped ? "border-px-lime bg-raised" : "hover:bg-raised/60"}`}
                 >
-                    {/* Front of Card (Question) */}
-                    <div className="absolute inset-0 w-full h-full bg-white rounded-3xl shadow-2xl p-5 sm:p-12 flex flex-col justify-center items-center text-center [backface-visibility:hidden] border-4 border-slate-100 overflow-hidden">
-                        <span className={`${isFlipped ? "bg-slate-800" : "bg-white"} absolute top-5 left-5 sm:top-6 sm:left-6 text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest z-10`}>Question</span>
+                    <span className={`px-notch absolute left-4 top-4 px-2 py-1 font-pixel text-[9px] text-px-void ${isFlipped ? "bg-px-lime" : "bg-px-cyan"}`}>
+                        {isFlipped ? "Answer" : "Question"}
+                    </span>
+                    <span className="absolute right-4 top-4 font-pixel text-[9px] text-muted">{masteredCount + 1}/{totalQuestions}</span>
 
-                        <div className="w-full h-full flex flex-col justify-center items-center pt-8 pb-8 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                            <h3 className={`${getFontSize(currentQuestion.questionText)} font-black text-slate-800 leading-snug text-balance`}>
-                                {currentQuestion.questionText}
-                            </h3>
-                        </div>
+                    <span className={`${getFontSize(face)} block max-w-[32ch] font-semibold leading-snug text-balance`}>{face}</span>
 
-                        <p className={`${isFlipped ? "bg-slate-800" : "bg-white"} absolute bottom-5 sm:bottom-6 text-slate-400 font-bold animate-pulse text-xs sm:text-sm z-10`}>Tap to flip</p>
-                    </div>
+                    {isFlipped && currentQuestion.explanation && (
+                        <span className="block max-w-[52ch] border-t-4 border-dashed border-frame pt-4 text-base text-muted text-balance sm:text-lg">
+                            {currentQuestion.explanation}
+                        </span>
+                    )}
 
-                    {/* Back of Card (Answer & Explanation) */}
-                    <div className="absolute inset-0 w-full h-full bg-slate-800 rounded-3xl shadow-2xl p-5 sm:p-12 flex flex-col justify-center items-center text-center [backface-visibility:hidden] border-4 border-slate-700 [transform:rotateY(180deg)] overflow-hidden">
-                        <span className="absolute top-5 left-5 sm:top-6 sm:left-6 text-xs sm:text-sm font-bold text-[#4ce0a3] uppercase tracking-widest bg-slate-800 z-10">Answer</span>
+                    {!isFlipped && <span className="px-label px-blink absolute bottom-4 text-muted">Tap to flip</span>}
+                </button>
 
-                        <div className="w-full h-full flex flex-col justify-center items-center pt-8 pb-4 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                            <h3 className={`${getFontSize(currentQuestion.correctAnswer)} font-black text-white leading-snug mb-3 sm:mb-4 text-balance`}>
-                                {currentQuestion.correctAnswer}
-                            </h3>
-
-                            {currentQuestion.explanation && (
-                                <div className="mt-2 sm:mt-4 p-3 sm:p-4 bg-slate-900/50 rounded-xl border border-slate-700 w-full max-w-lg shrink-0">
-                                    <p className="text-slate-300 text-xs sm:text-sm md:text-base leading-relaxed text-balance">
-                                        {currentQuestion.explanation}
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                {/* Controls: one action before the flip, a self-check after it */}
+                <div className="flex w-full max-w-2xl flex-col gap-2 sm:flex-row">
+                    {isFlipped ? (
+                        <>
+                            <button onClick={handleReviewLater} data-sfx="select" className="px-btn px-btn-lg px-btn-orange sm:flex-1">
+                                <Key>←</Key> Still learning
+                            </button>
+                            <button onClick={handleGotIt} data-sfx="none" className="px-btn px-btn-lg px-btn-lime sm:flex-1">
+                                <Check className="size-5" strokeWidth={3} aria-hidden /> Got it <Key>→</Key>
+                            </button>
+                        </>
+                    ) : (
+                        <button onClick={handleFlip} data-sfx="select" className="px-btn px-btn-lg px-btn-cyan w-full">
+                            Show answer <Key>Space</Key>
+                        </button>
+                    )}
                 </div>
 
-                {/* Controls (Only visible when flipped) */}
-                <div className={`mt-6 sm:mt-12 flex items-center justify-center gap-3 sm:gap-4 transition-all duration-300 w-full max-w-md ${isFlipped ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); handleReviewLater(); }}
-                        className="flex-1 flex flex-col items-center justify-center gap-1.5 sm:gap-2 py-3 sm:py-4 bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-amber-500 rounded-xl sm:rounded-2xl transition-all group"
-                    >
-                        <X className="w-6 h-6 sm:w-8 sm:h-8 text-slate-400 group-hover:text-amber-500 transition-colors" />
-                        <span className="text-white font-bold text-sm sm:text-base">Review Later</span>
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); handleGotIt(); }}
-                        className="flex-1 flex flex-col items-center justify-center gap-1.5 sm:gap-2 py-3 sm:py-4 bg-[#4ce0a3]/10 hover:bg-[#4ce0a3]/20 border-2 border-[#4ce0a3]/50 hover:border-[#4ce0a3] rounded-xl sm:rounded-2xl transition-all group"
-                    >
-                        <Check className="w-6 h-6 sm:w-8 sm:h-8 text-[#4ce0a3] group-hover:scale-110 transition-transform" />
-                        <span className="text-[#4ce0a3] font-bold text-sm sm:text-base">Got It</span>
-                    </button>
-                </div>
-
+                <p className="hidden text-center text-sm text-muted sm:block">
+                    Space flips the card. After flipping, ← keeps it in the deck and → marks it learned. M turns music on or off.
+                </p>
             </div>
         </div>
     );
