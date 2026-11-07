@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react";
-import QuizTypeSelector from "./QuestionTypeSelector";
+import { Loader2 } from "lucide-react";
+import { PixelBar } from "./arcade/Hud";
 import handleAnonymousGeneration from "../actions/generate";
 import fpPromise from '@fingerprintjs/fingerprintjs'
 import { handleAuthenticatedGeneration } from "../actions/generate";
@@ -13,6 +14,14 @@ const FileDropzone = dynamic(() => import('./FileDropZone'), { ssr: false });
 const ImageUploadZone = dynamic(() => import('./ImageUploadZone'), { ssr: false });
 const QuizModal = dynamic(() => import('./QuizModal'), { ssr: false });
 
+
+// Each question type owns a cabinet color (see /designsystem).
+const TYPE_OPTIONS: [QuizType, string, string][] = [
+  ["MULTIPLE_CHOICE", "Multiple choice", "px-btn-cyan"],
+  ["TRUE_FALSE", "True or false", "px-btn-pink"],
+  ["IDENTIFICATION", "Identification", "px-btn-yellow"],
+  ["ESSAY", "Essay", "px-btn-lime"],
+];
 
 interface HomeClientProps {
   initialUser: AppUser | null;
@@ -250,24 +259,22 @@ export default function HomeClient({ initialUser }: HomeClientProps) {
       {quizData && isOpen ? (
         <QuizModal key={quizData.id} quizData={quizData} onClose={handleCloseModal} isOpen={isOpen} user={user} />
       ) : (
-        <div className="flex flex-col items-center w-full max-w-sm xl:w-lg mt-4 lg:mt-0">
-          {/* The Segmented Control Container */}
-          <div className="flex shrink-0 w-full max-w-sm rounded-full border border-slate-300 overflow-hidden bg-white font-inter">
-            {options.map((option, index) => {
+        <div className="px-panel w-full p-4 sm:p-5">
+          <p className="px-label text-px-pink">Player 1 · New quiz</p>
+
+          <div role="tablist" aria-label="Source type" className="mt-3 grid grid-cols-3 gap-2">
+            {options.map((option) => {
               const isActive = selectedOption === option;
 
               return (
                 <button
                   key={option}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  data-sfx="select"
                   onClick={() => setSelectedOption(option)}
-                  className={`
-                flex-1 py-2 px-4 text-sm font-semibold transition-colors duration-300
-                ${index !== options.length - 1 ? 'border-r border-slate-300' : ''}
-                ${isActive
-                      ? 'bg-[#4ce0a3]' // Matches the mint green from the image
-                      : 'bg-white text-slate-600 hover:bg-slate-50'
-                    }
-              `}
+                  className={`px-btn px-btn-sm w-full ${isActive ? 'px-btn-cyan' : 'px-btn-ghost'}`}
                 >
                   {option}
                 </button>
@@ -275,54 +282,41 @@ export default function HomeClient({ initialUser }: HomeClientProps) {
             })}
           </div>
 
-          <div className="mb-3 md:w-full">
-            <div>
-              <div hidden={selectedOption !== "File"} className="pt-4 w-full">
-                <FileDropzone handleRemoveFile={handleRemoveFile} file={uploadedFile} handleUploadFile={handleUploadFile} />
-              </div>
-              <div hidden={selectedOption !== "Text"} className="pt-4 w-full">
-                <textarea value={textInput} onChange={(e) => setTextInput(e.target.value)} placeholder="Enter text here..." className="w-full h-54 border-1 border-white rounded-t-md focus:outline-none p-2 text-white"></textarea>
-              </div>
-              <div hidden={selectedOption !== "Image"} className="pt-4">
-                <ImageUploadZone image={uploadedImage} handleUploadImage={handleUploadImage} handleRemoveImage={handleRemoveImage} />
-              </div>
+          <div className="mt-3">
+            <div hidden={selectedOption !== "File"}>
+              <FileDropzone variant="arcade" handleRemoveFile={handleRemoveFile} file={uploadedFile} handleUploadFile={handleUploadFile} />
             </div>
-            <div className="flex gap-1 border-1 rounded-b-md border-white px-2">
-              {/* Number of Questions */}
-              <label className="flex items-center gap-2 font-inter text-white text-sm"># of Questions:
-                <select value={questionCount} onChange={(e) => setQuestionCount(e.target.value)} className="focus:outline-none border-1 border-white px-4 py-2 rounded-lg">
-                  <option value="5">5</option>
-                  <option value="10">10</option>
-                  <option value="15">15</option>
-                  <option value="20">20</option>
-                  <option value="25">25</option>
-                  <option value="30">30</option>
-                  <option value="35">35</option>
-                  <option value="40">40</option>
-                </select>
-              </label>
-
-              {/* Difficulty selector*/}
-              <label className="flex items-center gap-2 font-inter text-white text-sm">Difficulty:
-                <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as DifficultyType)} className="focus:outline-none border-1 border-white px-4 py-2 rounded-lg">
-                  <option value="easy">Easy</option>
-                  <option value="normal">Normal</option>
-                  <option value="hard">Hard</option>
-                </select>
-              </label>
+            <div hidden={selectedOption !== "Text"}>
+              <textarea
+                aria-label="Source text"
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                placeholder="Paste your notes, an article or a reading assignment"
+                className="px-input block h-44 w-full resize-none"
+              ></textarea>
+            </div>
+            <div hidden={selectedOption !== "Image"}>
+              <ImageUploadZone variant="arcade" image={uploadedImage} handleUploadImage={handleUploadImage} handleRemoveImage={handleRemoveImage} />
             </div>
           </div>
 
-          <div className="flex flex-col items-center max-w-sm">
-            <div className="w-full max-w-sm mb-4">
-              <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2">
-                Quiz Language
-              </label>
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-full p-3 sm:p-4 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-[#4ce0a3] transition-colors text-slate-700 font-medium bg-white"
-              >
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <label className="flex flex-col gap-1.5 text-base font-semibold">Questions
+              <select value={questionCount} onChange={(e) => setQuestionCount(e.target.value)} className="px-input w-full py-1.5 font-normal">
+                {[5, 10, 15, 20, 25, 30, 35, 40].map((n) => <option key={n} value={String(n)}>{n}</option>)}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1.5 text-base font-semibold">Difficulty
+              <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as DifficultyType)} className="px-input w-full py-1.5 font-normal">
+                <option value="easy">Easy</option>
+                <option value="normal">Normal</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+
+            <label className="col-span-2 flex flex-col gap-1.5 text-base font-semibold sm:col-span-1">Language
+              <select value={language} onChange={(e) => setLanguage(e.target.value)} className="px-input w-full py-1.5 font-normal">
                 <option value="English">English</option>
                 <option value="Filipino">Filipino</option>
                 <option value="Taglish (Tagalog-English)">Taglish</option>
@@ -330,24 +324,38 @@ export default function HomeClient({ initialUser }: HomeClientProps) {
                 <option value="French">French</option>
                 <option value="Japanese">Japanese</option>
               </select>
-            </div>
+            </label>
+          </div>
 
-            <QuizTypeSelector quizType={selectedType} handleTypeChange={handleSelectQuizType} />
+          <p className="mt-4 text-base font-semibold">Question type</p>
+          <div role="radiogroup" aria-label="Question type" className="mt-1.5 grid grid-cols-2 gap-2">
+            {TYPE_OPTIONS.map(([type, label, color]) => {
+              const isActive = selectedType === type;
+
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  data-sfx="select"
+                  onClick={() => handleSelectQuizType(type)}
+                  className={`px-btn px-btn-sm w-full ${isActive ? color : 'px-btn-ghost'}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Loading Progress UI */}
           {isGenerating && (
-            <div className="w-full mt-6 mb-2 font-inter bg-dark">
-              <div className="flex justify-between text-sm text-slate-300 mb-2">
-                <span>{statusText}</span>
-                <span>{progress}%</span>
+            <div className="mt-4">
+              <div className="mb-1.5 flex justify-between gap-3 text-base">
+                <span className="text-muted">{statusText}</span>
+                <span className="font-pixel text-[10px] text-px-cyan px-glow">{progress}%</span>
               </div>
-              <div className="w-full px-5 rounded-full h-2.5 overflow-hidden">
-                <div
-                  className="bg-[#4ce0a3] h-2.5 rounded-full transition-all duration-300 ease-out"
-                  style={{ width: `${progress}%` }}
-                ></div>
-              </div>
+              <PixelBar value={progress} color="cyan" label="Quiz generation progress" />
             </div>
           )}
 
@@ -355,33 +363,15 @@ export default function HomeClient({ initialUser }: HomeClientProps) {
           <button
             onClick={generateQuiz}
             disabled={isGenerating || (user ? user.aiCredits <= 0 : false)}
-            className={`
-            relative flex disabled:bg-slate-600 z-30 max-w-md disabled:text-slate-300 disabled:cursor-not-allowed items-center justify-center gap-3 py-4 w-full rounded-lg text-lg font-bold transition-colors mt-5
-            ${isGenerating
-                ? 'bg-slate-600 text-slate-300 cursor-not-allowed'
-                : 'bg-[#4ce0a3] hover:bg-[#3bc48b] text-slate-900'
-              }
-          `}
+            data-sfx="start"
+            className="px-btn px-btn-lg px-btn-yellow mt-4 w-full"
           >
-            {isGenerating && (
-              <svg
-                className="animate-spin h-6 w-6"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-              </svg>
-            )}
+            {isGenerating && <Loader2 className="size-5 animate-spin" aria-hidden />}
             {isGenerating
-              ? 'Generating...'
+              ? 'Generating…'
               : user && user.aiCredits <= 0
-                ? 'Daily limit reached. Please try again later'
-                : 'Generate Questions'}
+                ? 'Out of credits. Try again later'
+                : '▶ Generate quiz'}
           </button>
 
         </div>

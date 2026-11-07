@@ -29,12 +29,13 @@ export default async function PlayPage({ params }: PlayPageProps) {
 
     // Pass the data to our interactive client component
     return (
-        <div className="min-h-screen bg-slate-900 font-inter">
+        <div className="px-crt min-h-dvh bg-bg font-sans text-fg">
             {session.mode === "ASYNC" ? (
                 <AsyncPlayer
                     sessionId={session.id}
                     quizTitle={session.quiz.title}
                     questions={session.quiz.questions as any[]}
+                    isPractice={session.joinCode.startsWith("PRAC-")}
                 />
             ) : (
                 <LivePlayer

@@ -1,15 +1,18 @@
 "use client"
 
-import { CloudUpload } from 'lucide-react';
+import { CloudUpload, FileText, Check, X } from 'lucide-react';
 import { useState, useRef } from 'react';
 
 interface FileDropZoneProps {
     file: File | null,
     handleUploadFile: (file: File) => void
     handleRemoveFile: () => void
+    /** 'legacy' keeps the original look for screens not yet on the arcade system. */
+    variant?: 'legacy' | 'arcade'
 }
 
-export default function FileDropzone({ file, handleUploadFile, handleRemoveFile }: FileDropZoneProps) {
+export default function FileDropzone({ file, handleUploadFile, handleRemoveFile, variant = 'legacy' }: FileDropZoneProps) {
+    const arcade = variant === 'arcade';
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -51,6 +54,21 @@ export default function FileDropzone({ file, handleUploadFile, handleRemoveFile 
         }
     };
 
+        if (file && arcade) {
+        return (
+            <div className="px-notch flex h-44 w-full flex-col items-center justify-center gap-3 border-4 border-frame-strong bg-screen p-4">
+                <FileText className="size-8 text-muted" aria-hidden />
+                <div className="flex max-w-full items-center gap-2">
+                    <Check className="size-5 shrink-0 text-px-lime" strokeWidth={3} aria-hidden />
+                    <span className="truncate text-lg">{file.name}</span>
+                </div>
+                <button type="button" onClick={clearFile} className="px-btn px-btn-sm px-btn-ghost">
+                    <X className="size-4" aria-hidden /> Remove
+                </button>
+            </div>
+        );
+    }
+
     if (file) {
         return (
             <div className="flex items-center justify-between w-full p-4 border rounded-t-xl bg-slate-50 border-slate-200 font-inter">
@@ -90,6 +108,23 @@ export default function FileDropzone({ file, handleUploadFile, handleRemoveFile 
                         </svg>
                     </button>
                 </div>
+            </div>
+        );
+    }
+
+    if (arcade) {
+        return (
+            <div
+                className={`px-notch flex h-44 w-full flex-col items-center justify-center border-4 border-dashed px-6 text-center ${isDragging ? 'border-px-cyan bg-raised' : 'border-frame-strong bg-screen'}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
+                <CloudUpload className="size-8 text-px-cyan" aria-hidden />
+                <h3 className="mt-2 text-lg">Drop a file here</h3>
+                <p className="text-sm text-muted">PDF, TXT and DOCX formats, up to 5MB</p>
+                <button type="button" onClick={handleBrowseClick} className="px-btn px-btn-sm px-btn-ghost mt-3">Browse files</button>
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".jpeg,.jpg,.png,.pdf,.mp4" />
             </div>
         );
     }

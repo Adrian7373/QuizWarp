@@ -1,127 +1,120 @@
+import { Suspense } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import prisma from "@/lib/prisma";
-import QuestionBankControls from "./_components/QuestionBankControls";
 import NavBar from "@/app/_components/NavBar";
 import { getUser } from "@/app/actions";
+import QuestionBankControls from "./_components/QuestionBankControls";
 import QuestionBankGrid from "./_components/QuestionBankGrid";
-import { Suspense } from "react";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { BankSelectionProvider, PickTray } from "./_components/BankSelection";
+import { BANK_TYPES, isBankType, type BankQuestionType } from "./_components/types";
+import { EmptyState } from "../_components/Ledger";
+import Pagination from "../_components/Pagination";
+import GenerateNewButton from "../_components/GenerateNewButton";
 
 interface QuestionBankPageProps {
     searchParams: Promise<{ page?: string; search?: string; type?: string; }>;
 }
 
+const PAGE_SIZE = 20;
+
 // SKELETON
 
 function BankSkeleton() {
-    // Generate an array of 6 items to fill a 2-column grid nicely
-    const skeletonItems = Array(6).fill(null);
-
+    const block = "px-notch bg-raised";
     return (
-        <div className="relative animate-pulse w-full">
-            {/* List Controls Placeholder (Showing X of Y) */}
-            <div className="flex justify-between items-center mb-4 px-2">
-                <div className="h-4 w-48 bg-slate-200 rounded"></div>
-                <div className="h-4 w-32 bg-slate-200 rounded"></div>
+        <div aria-hidden>
+            <div className="mb-3 flex items-center justify-between">
+                <div className={`h-4 w-48 ${block}`} />
+                <div className={`h-9 w-36 ${block}`} />
             </div>
-
-            {/* Questions Grid Placeholder */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {skeletonItems.map((_, index) => (
-                    <div
-                        key={index}
-                        className="p-5 rounded-xl border-2 border-slate-200 bg-white flex gap-4"
-                    >
-                        {/* Checkbox Placeholder */}
-                        <div className="shrink-0 mt-1">
-                            <div className="w-6 h-6 bg-slate-200 rounded flex-shrink-0"></div>
+            <ul className="grid gap-3 md:grid-cols-2">
+                {Array.from({ length: 6 }, (_, i) => (
+                    <li key={i} className="px-panel flex gap-3 p-4">
+                        <div className={`size-6 shrink-0 ${block}`} />
+                        <div className="w-full space-y-2.5">
+                            <div className={`h-5 w-40 ${block}`} />
+                            <div className={`h-5 w-11/12 ${block}`} />
+                            <div className={`h-5 w-2/3 ${block}`} />
+                            <div className={`h-4 w-1/3 ${block}`} />
                         </div>
-
-                        {/* Content Placeholder */}
-                        <div className="min-w-0 flex-1">
-                            {/* Quiz Title Line */}
-                            <div className="h-3 w-32 bg-slate-200 rounded mb-3"></div>
-
-                            {/* Question Text (Simulating 2 lines) */}
-                            <div className="h-5 w-3/4 bg-slate-300 rounded mb-2"></div>
-                            <div className="h-5 w-1/2 bg-slate-300 rounded mb-4"></div>
-
-                            {/* Answer Block */}
-                            <div className="h-11 w-full bg-slate-200 rounded-lg border border-slate-100"></div>
-                        </div>
-                    </div>
+                    </li>
                 ))}
-            </div>
-
-            {/* Pagination Controls Placeholder */}
-            <div className="flex items-center justify-center gap-4 mt-8">
-                <div className="w-10 h-10 rounded-lg bg-slate-200"></div>
-                <div className="h-4 w-24 bg-slate-200 rounded"></div>
-                <div className="w-10 h-10 rounded-lg bg-slate-200"></div>
-            </div>
+            </ul>
         </div>
     );
 }
 
-
 // ENGINE
 
-async function BankData({ currentPage, page, search, type, userId }: { currentPage: number, page: string, search: string, type: string, userId: string }) {
-
-    // --- Server-Side Pagination & Search Setup ---
-    const PAGE_SIZE = 20;
-    const skip = (currentPage - 1) * PAGE_SIZE;
-    const searchTerm = search || "";
-    const questionType = type || "ALL";
+async function BankData({ currentPage, search, type, userId, hasAny }: {
+    currentPage: number; search: string; type: BankQuestionType | "ALL"; userId: string; hasAny: boolean;
+}) {
+    if (!hasAny) {
+        return (
+            <EmptyState say="Your bank is empty. Every quiz you generate drops its questions in here, ready to remix.">
+                <GenerateNewButton userId={userId} />
+            </EmptyState>
+        );
+    }
 
     // Build the Prisma where clause dynamically
-    const whereClause: any = {
-        quiz: { creatorId: userId }
+    const whereClause = {
+        quiz: { creatorId: userId },
+        ...(type !== "ALL" ? { questionType: type } : {}),
+        ...(search ? {
+            OR: [
+                { questionText: { contains: search, mode: "insensitive" as const } },
+                { quiz: { title: { contains: search, mode: "insensitive" as const } } },
+            ],
+        } : {}),
     };
 
-    if (questionType !== "ALL") {
-        whereClause.questionType = questionType;
-    }
-
-    if (searchTerm) {
-        whereClause.OR = [
-            { questionText: { contains: searchTerm, mode: 'insensitive' } },
-            { quiz: { title: { contains: searchTerm, mode: 'insensitive' } } }
-        ];
-    }
-
-    // Run both the paginated data fetch AND the total count query simultaneously
-    const [paginatedQuestions, totalQuestionsCount] = await Promise.all([
+    const [questions, totalCount] = await Promise.all([
         prisma.question.findMany({
             where: whereClause,
-            include: {
-                quiz: { select: { title: true } }
+            select: {
+                id: true,
+                questionType: true,
+                questionText: true,
+                options: true,
+                correctAnswer: true,
+                quiz: { select: { title: true } },
             },
-            orderBy: { quizId: 'desc' },
-            skip,
-            take: PAGE_SIZE
+            // Newest quiz first; id keeps the order stable so pages don't shuffle.
+            orderBy: [{ quiz: { createdAt: "desc" } }, { id: "asc" }],
+            skip: (currentPage - 1) * PAGE_SIZE,
+            take: PAGE_SIZE,
         }),
-        prisma.question.count({ where: whereClause })
+        prisma.question.count({ where: whereClause }),
     ]);
 
-    const totalPages = Math.ceil(totalQuestionsCount / PAGE_SIZE);
+    if (questions.length === 0) {
+        return (
+            <EmptyState mood="sad" say={search ? `No questions match “${search}” with this filter.` : "No questions of this type yet."}>
+                <Link href="/dashboard/bank" className="px-btn px-btn-ghost">Clear filters</Link>
+            </EmptyState>
+        );
+    }
 
     return (
-        <QuestionBankGrid
-            questions={paginatedQuestions}
-            userId={userId}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalCount={totalQuestionsCount}
-            initialSearch={searchTerm}
-        />
-    )
+        <>
+            <QuestionBankGrid questions={questions} totalCount={totalCount} />
+            <Pagination
+                currentPage={currentPage}
+                totalPages={Math.ceil(totalCount / PAGE_SIZE)}
+                params={{ search: search || undefined, type: type !== "ALL" ? type : undefined }}
+            />
+        </>
+    );
 }
 
 export default async function QuestionBankPage({ searchParams }: QuestionBankPageProps) {
-    const { page, search, type } = await searchParams;
-    const currentPage = Math.max(1, parseInt(page || "1"));
+    const { page, search: rawSearch, type: rawType } = await searchParams;
+    const currentPage = Math.max(1, parseInt(page || "1") || 1);
+    const search = rawSearch?.trim() ?? "";
+    const type: BankQuestionType | "ALL" = isBankType(rawType) ? rawType : "ALL";
 
     const supabase = await createClient();
     const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -130,50 +123,55 @@ export default async function QuestionBankPage({ searchParams }: QuestionBankPag
         throw new Error("Error accessing page!")
     }
 
-    let appUser = null;
-    const userResponse = await getUser(authUser.id);
-    if (userResponse.user) appUser = userResponse.user;
+    // The user and per-type counts for the filter chips, in parallel.
+    const [userResponse, groups] = await Promise.all([
+        getUser(authUser.id),
+        prisma.question.groupBy({
+            by: ["questionType"],
+            where: { quiz: { creatorId: authUser.id } },
+            _count: { _all: true },
+        }),
+    ]);
+    const appUser = userResponse.user ?? null;
 
+    const counts = Object.fromEntries(BANK_TYPES.map((t) => [t, 0])) as Record<BankQuestionType | "ALL", number>;
+    counts.ALL = 0;
+    for (const g of groups) {
+        if (isBankType(g.questionType)) counts[g.questionType] = g._count._all;
+        counts.ALL += g._count._all;
+    }
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col font-inter">
+        <div className="px-crt min-h-dvh bg-bg font-sans text-fg">
             <NavBar user={appUser} />
-            <main className="flex-1 pt-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto w-full pb-32">
+            <BankSelectionProvider userId={authUser.id}>
+                <main className="mx-auto w-full max-w-6xl px-4 pb-40 pt-24 sm:px-6">
 
-                <div className="mb-8">
-                    <Link href="/dashboard" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#4ce0a3] transition-colors font-semibold text-sm mb-4">
-                        <ArrowLeft className="w-4 h-4 text-black" /> Back to Dashboard
+                    <Link href="/dashboard" className="inline-flex items-center gap-2 text-base text-muted underline-offset-4 hover:text-fg hover:underline">
+                        <ArrowLeft className="size-4" aria-hidden /> Dashboard
                     </Link>
 
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mt-4">
+                    <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:items-end">
                         <div>
-                            <h1 className="text-3xl font-black text-slate-900">Question Bank</h1>
-                            <p className="text-slate-500 mt-1">Mix and match your past questions to create a new quiz.</p>
+                            <h1 className="px-title text-xl sm:text-2xl">Question bank</h1>
+                            <p className="mt-3 max-w-[52ch] text-lg text-muted">
+                                Every question from every quiz you&apos;ve made, in one place. Pick any mix, across pages and filters, and build a new quiz from them.
+                            </p>
                         </div>
-
-                        {/* Interactive Client Component */}
-                        <QuestionBankControls
-                            initialSearch={search ?? ""}
-                            initialType={type ?? "ALL"}
-                        />
+                        {counts.ALL > 0 && (
+                            <QuestionBankControls initialSearch={search} initialType={type} counts={counts} />
+                        )}
                     </div>
-                </div>
 
-                {/* Everything in here gets destroyed and rebuilt */}
-                <Suspense
-                    key={`${currentPage}-${type}-${search}`}
-                    fallback={<BankSkeleton />}
-                >
-                    <BankData
-                        currentPage={currentPage}
-                        page={page ?? "1"}
-                        search={search ?? ""}
-                        userId={authUser.id}
-                        type={type ?? "ALL"}
-                    />
-                </Suspense>
-
-            </main>
+                    <div className="mt-8">
+                        {/* Only the results reload on a new page, search or filter; the picks above survive. */}
+                        <Suspense key={`${currentPage}-${type}-${search}`} fallback={<BankSkeleton />}>
+                            <BankData currentPage={currentPage} search={search} type={type} userId={authUser.id} hasAny={counts.ALL > 0} />
+                        </Suspense>
+                    </div>
+                </main>
+                <PickTray userId={authUser.id} />
+            </BankSelectionProvider>
         </div>
     );
 }

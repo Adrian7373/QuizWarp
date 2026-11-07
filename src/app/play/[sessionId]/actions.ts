@@ -63,7 +63,7 @@ export async function getParticipantProgress(participantId: string) {
             where: { id: participantId },
             include: {
                 responses: {
-                    select: { questionId: true } // We only need to know WHICH questions they answered
+                    select: { questionId: true, isCorrect: true }
                 }
             }
         });
@@ -73,6 +73,8 @@ export async function getParticipantProgress(participantId: string) {
         return {
             success: true,
             answeredQuestionIds: participant.responses.map(r => r.questionId),
+            correctCount: participant.responses.filter(r => r.isCorrect).length,
+            maxStreak: participant.maxStreak,
             score: participant.totalScore,
             streak: participant.currentStreak
         };

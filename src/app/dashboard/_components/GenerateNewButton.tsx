@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react";
-import { BrainCircuit } from "lucide-react";
 import GenerateQuizModal from "./GenerateQuizModal";
 
 interface GenerateNewButtonProps {
@@ -13,13 +12,8 @@ export default function GenerateNewButton({ userId }: GenerateNewButtonProps) {
 
     return (
         <>
-            <button
-                onClick={() => setIsModalOpen(true)}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 bg-[#4ce0a3] hover:bg-[#3bc48b] text-slate-900
-                 font-bold text-sm sm:text-base px-3 sm:px-5 py-2.5 rounded-xl transition-colors shrink-0 hover:scale-105 transition-all duration-300 cursor-pointer"
-            >
-                <BrainCircuit className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                <span className="whitespace-nowrap">Generate New</span>
+            <button onClick={() => setIsModalOpen(true)} data-sfx="start" className="px-btn px-btn-yellow">
+                ▶ Generate quiz
             </button>
 
             {isModalOpen && (

@@ -1,17 +1,20 @@
 "use client"
 
-import { useState, type KeyboardEvent } from 'react';
-import { useMediaQuery } from 'react-responsive';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { jsPDF } from 'jspdf';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { saveAs } from 'file-saver';
-import { CalendarClock, Check, CircleX, Copy, Edit, Save, Timer, Trash, Play, Users, Loader2, BookOpen, BrainCircuit } from 'lucide-react';
+import { ArrowLeft, BookOpen, BrainCircuit, CalendarClock, Check, ChevronDown, Copy, Download, Edit, Loader2, Play, Printer, RotateCcw, Save, Timer, Trash2, X } from 'lucide-react';
 import type { AppUser, QuizType } from '../page';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { deleteQuiz, updateQuiz } from '../actions';
 import { createAsyncSession, createLiveSession } from '../actions/generate';
 import { startPracticeQuiz } from '../actions';
+import Dialog from './arcade/Dialog';
+import { Banner, PixelBar } from './arcade/Hud';
+import HoloOrb from './arcade/HoloOrb';
+import { playSfx } from './arcade/sfx';
 
 // Interfaces matching your Pydantic/Prisma unified schema
 export interface Question {
@@ -38,12 +41,33 @@ interface QuizModalProps {
     user?: AppUser | null;
 }
 
+// Answer keys keep fixed cabinet colors: A red, B cyan, C yellow, D lime (see /designsystem).
+const KEY_FILL = ["bg-px-red", "bg-px-cyan", "bg-px-yellow", "bg-px-lime"];
+
+const TYPE_CHIP: Record<string, { label: string; fill: string }> = {
+    MULTIPLE_CHOICE: { label: "Multiple choice", fill: "bg-px-cyan" },
+    TRUE_FALSE: { label: "True or false", fill: "bg-px-pink" },
+    IDENTIFICATION: { label: "Identification", fill: "bg-px-yellow" },
+    ESSAY: { label: "Essay", fill: "bg-px-lime" },
+};
+
+const LEVELS: Record<string, { n: number; fill: string; label: string }> = {
+    easy: { n: 1, fill: "bg-px-lime", label: "Easy" },
+    normal: { n: 2, fill: "bg-px-yellow", label: "Normal" },
+    hard: { n: 3, fill: "bg-px-red", label: "Hard" },
+    mixed: { n: 2, fill: "bg-px-cyan", label: "Mixed" },
+};
+
+/** Which UI a question gets. Older/guest quizzes may lack questionType, so fall back to the options. */
+function kindOf(q: Question): "choice" | "typed" | "essay" {
+    if (q.questionType === "ESSAY") return "essay";
+    return q.options && q.options.length > 0 ? "choice" : "typed";
+}
+
+const toolBtn = "px-btn px-btn-sm";
+
 export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModalProps) {
     const router = useRouter();
-
-    // Responsive breakpoints
-    const sm = useMediaQuery({ query: '(min-width: 640px)' });
-    const xsm = useMediaQuery({ query: '(min-width: 500px)' });
 
     // ==========================================
     // State Management
@@ -61,6 +85,7 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
     const [showDownloadMenu, setShowDownloadMenu] = useState(false);
     const [userAnswers, setUserAnswers] = useState<Record<number, string>>({});
     const [submittedAnswers, setSubmittedAnswers] = useState<Record<number, string>>({});
+    const [revealedEssays, setRevealedEssays] = useState<Record<number, boolean>>({});
     const [isDeleting, setIsDeleting] = useState(false);
 
     // Create quiz async session states
@@ -78,9 +103,42 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
     const [isCreatingLive, setIsCreatingLive] = useState(false);
     const [gameMode, setGameMode] = useState<"SOLO" | "FACTIONS">("SOLO");
 
+    // Close the download menu on an outside click or Escape.
+    const downloadRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!showDownloadMenu) return;
+        const onDown = (e: MouseEvent) => { if (!downloadRef.current?.contains(e.target as Node)) setShowDownloadMenu(false); };
+        const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") setShowDownloadMenu(false); };
+        document.addEventListener("mousedown", onDown);
+        document.addEventListener("keydown", onKey);
+        return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+    }, [showDownloadMenu]);
+
     if (!isOpen || !quizData) return null;
 
     const isStudent = user?.role === "STUDENT";
+
+    // ==========================================
+    // Practice scoring (essays aren't auto-graded, so they don't count)
+    // ==========================================
+    const isCorrectFor = (q: Question, index: number) => {
+        const kind = kindOf(q);
+        if (kind === "essay") return null;
+        const answer = kind === "typed" ? submittedAnswers[index] : userAnswers[index];
+        if (typeof answer !== "string" || !answer.trim()) return null;
+        return kind === "typed" ? answer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase() : answer === q.correctAnswer;
+    };
+    const gradable = editedQuestions.filter((q) => kindOf(q) !== "essay").length;
+    const results = editedQuestions.map((q, i) => isCorrectFor(q, i));
+    const answeredCount = results.filter((r) => r !== null).length;
+    const correctCount = results.filter((r) => r === true).length;
+    const allAnswered = gradable > 0 && answeredCount === gradable;
+
+    const resetRun = () => {
+        setUserAnswers({});
+        setSubmittedAnswers({});
+        setRevealedEssays({});
+    };
 
     // ==========================================
     // Handlers
@@ -122,6 +180,12 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
         setIsCreatingSession(false);
     };
 
+    const closeAssign = () => {
+        setIsAssigning(false);
+        setGeneratedPin("");
+        setDueDate("");
+    };
+
     const handlePracticeLaunch = async () => {
         if (!user || !quizData?.id) return;
 
@@ -148,6 +212,12 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
         setUserAnswers(prev => ({ ...prev, [questionIndex]: answer }));
     };
 
+    /** A multiple choice or true/false pick: lock it in and play the result sound. */
+    const handleChoicePick = (questionIndex: number, option: string) => {
+        handleAnswerSelect(questionIndex, option);
+        playSfx(option === editedQuestions[questionIndex].correctAnswer ? "correct" : "wrong");
+    };
+
     const handleClose = () => {
         if (onClose) {
             onClose();
@@ -159,7 +229,10 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
     const handleIdentificationAnswerSubmit = (questionIndex: number) => {
         const trimmedAnswer = (userAnswers[questionIndex] || '').trim();
         if (!trimmedAnswer) return;
+        if (submittedAnswers[questionIndex] === trimmedAnswer) return;
         setSubmittedAnswers(prev => ({ ...prev, [questionIndex]: trimmedAnswer }));
+        const right = trimmedAnswer.toLowerCase() === editedQuestions[questionIndex].correctAnswer.trim().toLowerCase();
+        playSfx(right ? "correct" : "wrong");
     };
 
     const handleIdentificationKeyDown = (event: KeyboardEvent<HTMLInputElement>, questionIndex: number) => {
@@ -170,16 +243,6 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
     };
 
     const handlePrint = () => window.print();
-
-    const handleShare = async () => {
-        try {
-            await navigator.clipboard.writeText(window.location.href);
-            toast.success("Link copied to clipboard!");
-        } catch (err) {
-            console.error("Failed to copy link:", err);
-            toast.error("Failed to copy link.");
-        }
-    };
 
     const generateTXT = () => {
         let content = `${editedTitle.toUpperCase()}\n`;
@@ -344,7 +407,7 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
             if (format === 'pdf') generatePDF();
         } catch (error) {
             console.error(`Failed to generate ${format}:`, error);
-            alert(`An error occurred while generating your ${format.toUpperCase()} file.`);
+            toast.error(`Couldn't create the ${format.toUpperCase()} file. Try again.`);
         }
     };
 
@@ -380,6 +443,13 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
         }
     };
 
+    const cancelEdits = () => {
+        setEditedTitle(quizData.title);
+        setEditedDescription(quizData.description);
+        setEditedQuestions(quizData.questions);
+        setIsEditing(false);
+    };
+
     const handleSaveChanges = async () => {
         if (!user || !quizData?.id) return;
         setIsSavingEdits(true);
@@ -402,173 +472,174 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
         setIsSavingEdits(false);
     };
 
+    const level = LEVELS[quizData.difficulty] ?? LEVELS.normal;
+    const minDue = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
     return (
-        <div className="fixed top-[72px] left-0 right-0 bottom-0 z-[40] flex flex-col bg-slate-50 font-sans overflow-hidden print:static print:h-auto print:block print:overflow-visible">
-            <header className="print:hidden z-40 flex px-3 sm:px-4 py-3 sm:py-4 bg-darker border-b border-slate-200 shadow-sm shrink-0 relative min-h-[72px]">
+        <div className="fixed bottom-0 left-0 right-0 top-16 z-[40] flex flex-col overflow-hidden bg-bg font-sans text-fg print:static print:block print:h-auto print:overflow-visible">
 
-                {/* Action Container: flex-wrap with uniform gap, pr-12 ensures buttons don't overlap the absolute close button on mobile */}
-                <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 flex-1 pr-12 sm:pr-0">
-
-                    {/* Answers Toggle */}
-                    <label className="flex items-center cursor-pointer gap-2 group print:hidden shrink-0 mr-1 sm:mr-0">
-                        <span className="text-sm font-medium text-white group-hover:text-slate-300 transition-colors">
-                            Answers
-                        </span>
-                        <div className="relative">
-                            <input type="checkbox" className="sr-only" checked={includeAnswers} onChange={() => setIncludeAnswers(!includeAnswers)} />
-                            <div className={`block w-11 h-6 rounded-full transition-colors ${includeAnswers ? 'bg-[#4ce0a3]' : 'bg-slate-600'}`}></div>
-                            <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${includeAnswers ? 'translate-x-5' : ''}`}></div>
-                        </div>
-                    </label>
-
-                    {/* Download */}
-                    <div className="relative print:hidden shrink-0">
-                        <button onClick={() => setShowDownloadMenu(!showDownloadMenu)} className="flex items-center justify-center gap-1.5 sm:gap-2 w-10 h-10 sm:w-auto sm:h-auto sm:px-3 sm:py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-4 sm:h-4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                            <span className="hidden sm:inline">Download</span>
-                        </button>
-
-                        {showDownloadMenu && (
-                            <div className="absolute left-0 mt-2 w-32 bg-white rounded-lg shadow-lg border border-slate-100 overflow-hidden z-10">
-                                <button onClick={() => handleDownload('pdf')} className="block w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">PDF (.pdf)</button>
-                                <button onClick={() => handleDownload('docx')} className="block w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Word (.docx)</button>
-                                <button onClick={() => handleDownload('txt')} className="block w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Text (.txt)</button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Print */}
-                    <button onClick={handlePrint} className="flex items-center justify-center gap-1.5 sm:gap-2 w-10 h-10 sm:w-auto sm:h-auto sm:px-3 sm:py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors print:hidden shrink-0">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-4 sm:h-4"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-                        <span className="hidden sm:inline">Print</span>
+            {/* ===== TOOLBAR ===== */}
+            <header className="z-40 shrink-0 border-b-4 border-frame bg-surface print:hidden">
+                <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-3 py-2.5 sm:px-6">
+                    <button onClick={handleClose} className={`${toolBtn} px-btn-ghost`} aria-label="Back">
+                        <ArrowLeft className="size-4" aria-hidden /><span className="hidden sm:inline">Back</span>
                     </button>
 
-                    {/* Desktop Divider */}
-                    <div className="hidden sm:block w-px h-6 bg-slate-600 mx-1 shrink-0"></div>
+                    {isEditing ? (
+                        <>
+                            <span className="px-label ml-1 text-px-yellow px-glow">Editing</span>
+                            <div className="ml-auto flex gap-2">
+                                <button onClick={cancelEdits} disabled={isSavingEdits} className={`${toolBtn} px-btn-ghost`}>Cancel</button>
+                                <button onClick={handleSaveChanges} disabled={isSavingEdits} data-sfx="coin" className={`${toolBtn} px-btn-yellow`}>
+                                    {isSavingEdits ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
+                                    {isSavingEdits ? "Saving…" : "Save changes"}
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            {/* Answers switch */}
+                            <label className="ml-1 flex cursor-pointer items-center gap-2 text-base">
+                                <input type="checkbox" className="peer sr-only" checked={includeAnswers} onChange={() => setIncludeAnswers(!includeAnswers)} data-sfx="select" />
+                                <span aria-hidden className={`px-notch relative h-6 w-11 border-4 peer-focus-visible:border-px-cyan ${includeAnswers ? "border-px-void bg-px-lime" : "border-frame-strong bg-screen"}`}>
+                                    <span className={`absolute top-0 size-4 bg-px-snow ${includeAnswers ? "left-[20px] border-2 border-px-void" : "left-0 border-2 border-frame-strong"}`} />
+                                </span>
+                                <span className="hidden sm:inline">Show answers</span>
+                                <span className="sm:hidden">Answers</span>
+                            </label>
 
-                    {/* Edit - Only visible to teachers */}
-                    {!isStudent && (
-                        isEditing ? (
-                            <>
-                                <button onClick={() => setIsEditing(false)} className="px-3 py-2 h-10 sm:h-auto text-sm font-bold text-slate-300 hover:text-white transition-colors shrink-0">
-                                    Cancel
+                            <div className="relative" ref={downloadRef}>
+                                <button onClick={() => setShowDownloadMenu(!showDownloadMenu)} aria-expanded={showDownloadMenu} aria-haspopup="menu" className={`${toolBtn} px-btn-ghost`}>
+                                    <Download className="size-4" aria-hidden /><span className="hidden sm:inline">Download</span><ChevronDown className="size-3.5" aria-hidden />
                                 </button>
-                                <button onClick={handleSaveChanges} disabled={isSavingEdits} className="flex items-center justify-center gap-2 px-4 py-2 h-10 sm:h-auto text-sm font-bold text-white bg-[#4ce0a3] rounded-lg hover:bg-[#3bc48b] transition-colors disabled:opacity-70 shrink-0">
-                                    {isSavingEdits ? "Saving..." : <><Save className="w-4 h-4" /> Save</>}
-                                </button>
-                            </>
-                        ) : (
-                            <button onClick={() => setIsEditing(true)} className="flex items-center justify-center gap-1.5 sm:gap-2 w-10 h-10 sm:w-auto sm:h-auto px-3 py-2 text-sm font-bold text-slate-900 bg-slate-200 rounded-lg hover:bg-slate-300 transition-colors shrink-0">
-                                <Edit className="w-5 h-5 sm:w-4 sm:h-4" />
-                                <span className="hidden sm:inline">Edit</span>
+                                {showDownloadMenu && (
+                                    <div role="menu" className="px-panel absolute left-0 z-10 mt-2 w-44 py-1">
+                                        {([["pdf", "PDF (.pdf)"], ["docx", "Word (.docx)"], ["txt", "Text (.txt)"]] as const).map(([fmt, label]) => (
+                                            <button key={fmt} role="menuitem" onClick={() => handleDownload(fmt)} className="block w-full px-3 py-2 text-left text-base hover:bg-raised">{label}</button>
+                                        ))}
+                                        <p className="border-t-4 border-frame px-3 pt-2 pb-1 text-sm text-muted">{includeAnswers ? "Includes answers" : "Questions only"}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button onClick={handlePrint} className={`${toolBtn} px-btn-ghost`} aria-label="Print">
+                                <Printer className="size-4" aria-hidden /><span className="hidden sm:inline">Print</span>
                             </button>
-                        )
-                    )}
 
-                    {/* ROLE-BASED PRIMARY BUTTONS */}
-                    {user && quizData.id && (
-                        isStudent ? (
-                            <>
-                                {/* Flashcards */}
-                                <button onClick={() => router.push(`/study/${quizData.id}`)} className="flex items-center justify-center gap-1.5 sm:gap-2 w-10 h-10 sm:w-auto sm:h-auto px-3 py-2 text-sm font-bold text-emerald-900 bg-emerald-300 rounded-lg hover:bg-emerald-400 transition-colors print:hidden shrink-0">
-                                    <BookOpen className='w-5 h-5 sm:w-4 sm:h-4' />
-                                    <span className="hidden sm:inline">Flashcards</span>
+                            {user && !isStudent && (
+                                <button onClick={() => setIsEditing(true)} className={`${toolBtn} px-btn-ghost`} aria-label="Edit quiz">
+                                    <Edit className="size-4" aria-hidden /><span className="hidden sm:inline">Edit</span>
                                 </button>
-                                {/* Practice */}
-                                <button
-                                    onClick={handlePracticeLaunch}
-                                    disabled={isStartingPractice}
-                                    className="flex items-center justify-center gap-1.5 sm:gap-2 w-10 h-10 sm:w-auto sm:h-auto px-3 py-2 text-sm font-bold text-white bg-indigo-500 rounded-lg hover:bg-indigo-600 transition-colors print:hidden shrink-0 disabled:opacity-70"
-                                >
-                                    {isStartingPractice ? <Loader2 className="w-5 h-5 sm:w-4 sm:h-4 animate-spin" /> : <BrainCircuit className='w-5 h-5 sm:w-4 sm:h-4' />}
-                                    <span className="hidden sm:inline">{isStartingPractice ? "Starting..." : "Practice"}</span>
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                {/* Assign */}
-                                <button onClick={() => setIsAssigning(true)} className="flex items-center justify-center gap-1.5 sm:gap-2 w-10 h-10 sm:w-auto sm:h-auto px-3 py-2 text-sm font-bold text-slate-900 bg-amber-300 rounded-lg hover:bg-amber-400 transition-colors print:hidden shrink-0">
-                                    <CalendarClock className='w-5 h-5 sm:w-4 sm:h-4' />
-                                    <span className="hidden sm:inline">Assign</span>
-                                </button>
-                                {/* Live */}
-                                <button
-                                    onClick={() => setIsLaunchingLive(true)}
-                                    className="flex items-center justify-center gap-1.5 sm:gap-2 w-10 h-10 sm:w-auto sm:h-auto px-3 py-2 text-sm font-bold text-white bg-indigo-500 rounded-lg hover:bg-indigo-600 transition-colors print:hidden shrink-0"
-                                >
-                                    <Play className='w-5 h-5 sm:w-4 sm:h-4' fill="currentColor" />
-                                    <span className="hidden sm:inline">Live</span>
-                                </button>
-                            </>
-                        )
-                    )}
+                            )}
 
-                    {/* Delete (Shared by both roles) */}
-                    {user && (
-                        <button onClick={() => setIsDeleting(true)} className="flex items-center justify-center gap-1.5 sm:gap-2 w-10 h-10 sm:w-auto sm:h-auto px-3 py-2 text-sm font-bold text-white bg-rose-500 rounded-lg hover:bg-rose-600 transition-colors print:hidden shrink-0">
-                            <Trash className='w-5 h-5 sm:w-4 sm:h-4' />
-                            <span className="hidden sm:inline">Delete</span>
-                        </button>
+                            <div className="ml-auto flex flex-wrap gap-2">
+                                {user && quizData.id && (
+                                    isStudent ? (
+                                        <>
+                                            <button onClick={() => router.push(`/study/${quizData.id}`)} className={`${toolBtn} px-btn-yellow`}>
+                                                <BookOpen className="size-4" aria-hidden />Study
+                                            </button>
+                                            <button onClick={handlePracticeLaunch} disabled={isStartingPractice} data-sfx="start" className={`${toolBtn} px-btn-lime`}>
+                                                {isStartingPractice ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <BrainCircuit className="size-4" aria-hidden />}
+                                                {isStartingPractice ? "Starting…" : "Practice"}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <button onClick={() => setIsLaunchingLive(true)} className={`${toolBtn} px-btn-pink`}>
+                                                <Play className="size-4" fill="currentColor" aria-hidden />Host live
+                                            </button>
+                                            <button onClick={() => setIsAssigning(true)} className={`${toolBtn} px-btn-cyan`}>
+                                                <CalendarClock className="size-4" aria-hidden />Assign
+                                            </button>
+                                        </>
+                                    )
+                                )}
+                                {user && quizData.id && (
+                                    <button onClick={() => setIsDeleting(true)} className={`${toolBtn} px-btn-ghost hover:[--btn:var(--px-7)] hover:[--btn-ink:var(--px-0)]`} aria-label="Delete quiz" title="Delete quiz">
+                                        <Trash2 className="size-4" aria-hidden />
+                                    </button>
+                                )}
+                            </div>
+                        </>
                     )}
                 </div>
-
-                {/* Close Button - absolute top right on mobile, normal flex item on desktop */}
-                <button onClick={handleClose} className="absolute right-5 top-3 sm:static sm:ml-2 flex items-center justify-center w-10 h-10 text-slate-400 hover:text-white bg-slate-800 rounded-full transition-colors print:hidden shrink-0">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-6 sm:h-6"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </button>
             </header>
 
-            {/* 2. MAIN CONTENT AREA (Scrollable) */}
-            <main className="bg-slate-100 flex-1 overflow-y-auto p-4 sm:p-6 md:p-12 print:p-0 print:overflow-visible print:h-auto print:block">
-                <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
-                    {/* ... (Your existing Question loops, unchanged) ... */}
-                    <div className="flex flex-col min-w-0 items-center justify-center bg-white p-6 sm:p-8 rounded-xl border border-slate-200 shadow-sm print:border-none print:shadow-none mb-6 sm:mb-8">
+            {/* ===== QUESTIONS (scrollable) ===== */}
+            <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 print:overflow-visible print:p-0">
+                <div className="mx-auto max-w-3xl space-y-5 pb-16 print:space-y-6 print:pb-0">
+
+                    {/* Title card with the practice score */}
+                    <section className="px-panel p-5 sm:p-6 print:border-0 print:p-0">
                         {isEditing ? (
-                            <div className="w-full max-w-2xl space-y-4">
-                                <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Quiz Title</label>
-                                    <input type="text" value={editedTitle} onChange={(e) => setEditedTitle(e.target.value)} className="text-xl sm:text-2xl text-center font-bold text-slate-800 border-2 border-slate-200 focus:border-[#4ce0a3] p-3 rounded-lg w-full outline-none transition-colors" />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Description</label>
-                                    <textarea value={editedDescription} onChange={(e) => setEditedDescription(e.target.value)} className="text-sm text-center text-slate-600 border-2 border-slate-200 focus:border-[#4ce0a3] p-3 rounded-lg w-full outline-none transition-colors resize-none" rows={3} />
-                                </div>
+                            <div className="space-y-4">
+                                <label className="block text-base font-semibold">Title
+                                    <input type="text" value={editedTitle} onChange={(e) => setEditedTitle(e.target.value)} className="px-input mt-1.5 w-full text-xl font-semibold" />
+                                </label>
+                                <label className="block text-base font-semibold">Description
+                                    <textarea value={editedDescription} onChange={(e) => setEditedDescription(e.target.value)} className="px-input mt-1.5 w-full resize-none" rows={3} />
+                                </label>
                             </div>
                         ) : (
                             <>
-                                <h2 className="text-2xl sm:text-3xl text-center font-black text-slate-800 truncate mb-2 max-w-full">{editedTitle}</h2>
-                                <p className="text-sm sm:text-base text-center text-slate-500 mb-3">{editedDescription}</p>
-                                <span className={`px-3 py-1 text-xs font-bold rounded-full ${quizData.difficulty === "easy" ? "bg-emerald-100 text-emerald-700" : quizData.difficulty === "normal" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
-                                    {quizData.difficulty.charAt(0).toUpperCase() + quizData.difficulty.slice(1)}
-                                </span>
+                                <h1 className="px-title text-lg leading-relaxed sm:text-2xl print:text-2xl">{editedTitle}</h1>
+                                {editedDescription && <p className="mt-3 max-w-[60ch] text-lg text-muted">{editedDescription}</p>}
+                                <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-base">
+                                    <span className="inline-flex items-center gap-2">
+                                        <span className="flex gap-[3px]" aria-hidden>
+                                            {[1, 2, 3].map((i) => <span key={i} className={`size-2.5 border-2 border-px-void ${i <= level.n ? level.fill : "bg-raised"}`} />)}
+                                        </span>
+                                        {level.label}
+                                    </span>
+                                    <span className="text-muted">{editedQuestions.length} {editedQuestions.length === 1 ? "question" : "questions"}</span>
+                                </div>
+
+                                {gradable > 0 && (
+                                    <div className="mt-5 border-t-4 border-dashed border-frame pt-4 print:hidden">
+                                        {allAnswered ? (
+                                            <div className="flex flex-wrap items-center gap-4">
+                                                <Banner title="Quiz cleared!" detail={`${correctCount} of ${gradable} correct`} tone={correctCount / gradable >= 0.7 ? "lime" : "yellow"} />
+                                                <button onClick={resetRun} className={`${toolBtn} px-btn-ghost`}><RotateCcw className="size-4" aria-hidden />Play again</button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                                                <p className="text-base">
+                                                    <span className="font-semibold">Practice run.</span>{" "}
+                                                    <span className="text-muted">Pick an answer to check it.</span>
+                                                </p>
+                                                <div className="flex flex-1 items-center gap-3 sm:min-w-[16rem]">
+                                                    <PixelBar value={answeredCount} max={gradable} segments={Math.min(gradable, 20)} color="lime" label="Questions answered" />
+                                                    <span className="whitespace-nowrap font-pixel text-[10px]">{correctCount}/{gradable}</span>
+                                                </div>
+                                                {answeredCount > 0 && (
+                                                    <button onClick={resetRun} className={`${toolBtn} px-btn-ghost`}><RotateCcw className="size-4" aria-hidden />Reset</button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </>
                         )}
-                    </div>
+                    </section>
 
                     {editedQuestions.map((q, index) => {
-                        const hasOptions = q.options && q.options.length > 0;
-                        const isIdentification = !hasOptions;
-                        const hasSelection = isIdentification ? typeof submittedAnswers[index] === 'string' && submittedAnswers[index].trim().length > 0 : typeof userAnswers[index] === 'string' && userAnswers[index].trim().length > 0;
-                        const isCorrect = hasSelection && (isIdentification ? submittedAnswers[index].toLowerCase() === q.correctAnswer.toLowerCase() : userAnswers[index] === q.correctAnswer);
-                        const showFeedback = includeAnswers || hasSelection || isEditing;
+                        const kind = kindOf(q);
+                        const result = results[index]; // true / false / null (not answered or essay)
+                        const answered = result !== null;
+                        const essayRevealed = !!revealedEssays[index];
+                        const showFeedback = isEditing || answered || (includeAnswers && kind !== "essay") || (kind === "essay" && (essayRevealed || includeAnswers));
+                        const chip = q.questionType ? TYPE_CHIP[q.questionType] : null;
 
                         return (
-                            <div key={index} className="bg-white p-4 sm:p-6 md:p-8 rounded-xl border border-slate-200 shadow-sm print:shadow-none print:border-none print:p-0 print:mb-8 break-inside-avoid">
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-6 gap-4">
-                                    <div className="flex gap-3 sm:gap-4 w-full">
-                                        <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-100 text-slate-600 font-bold text-xs sm:text-sm border border-slate-200 mt-1 sm:mt-0">{index + 1}</span>
-                                        <div className="w-full">
-                                            {isEditing ? (
-                                                <textarea className="w-full text-lg sm:text-xl font-bold text-slate-800 border-2 border-slate-200 rounded-lg p-3 focus:border-[#4ce0a3] focus:outline-none resize-none transition-colors" onChange={(e) => handleQuestionChange(index, "questionText", e.target.value)} value={q.questionText} rows={3} />
-                                            ) : (
-                                                <h3 className="text-lg sm:text-xl font-bold text-slate-800 pt-0.5 sm:pt-1">{q.questionText}</h3>
-                                            )}
-                                        </div>
-                                    </div>
+                            <article key={index} className="px-panel break-inside-avoid p-4 sm:p-6 print:border-0 print:p-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="px-notch bg-px-void px-2 py-1 font-pixel text-[10px] text-px-snow">Q{index + 1}</span>
+                                    {chip && <span className={`px-notch px-1.5 py-1 font-pixel text-[9px] text-px-void print:hidden ${chip.fill}`}>{chip.label}</span>}
                                     {isEditing ? (
-                                        <div className="flex items-center gap-2 bg-slate-50 border-2 border-slate-200 rounded-lg px-2 py-1.5 shrink-0 self-start">
-                                            <Timer className="w-4 h-4 text-slate-400" />
-                                            <select value={q.timeLimitSeconds || ""} onChange={(e) => handleQuestionChange(index, 'timeLimitSeconds', e.target.value ? parseInt(e.target.value) : null)} className="bg-transparent text-sm font-bold text-slate-600 focus:outline-none cursor-pointer">
+                                        <label className="ml-auto flex items-center gap-2 text-sm text-muted">
+                                            <Timer className="size-4" aria-hidden /><span className="sr-only">Time limit</span>
+                                            <select value={q.timeLimitSeconds || ""} onChange={(e) => handleQuestionChange(index, 'timeLimitSeconds', e.target.value ? parseInt(e.target.value) : null)} className="px-input py-1 text-base">
                                                 <option value="">No limit</option>
                                                 <option value="10">10 seconds</option>
                                                 <option value="20">20 seconds</option>
@@ -577,251 +648,247 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
                                                 <option value="60">1 minute</option>
                                                 <option value="120">2 minutes</option>
                                             </select>
-                                        </div>
-                                    ) : (
-                                        q.timeLimitSeconds && (
-                                            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full shrink-0 self-start">
-                                                <Timer className="w-3 h-3 sm:w-4 sm:h-4" />
-                                                {q.timeLimitSeconds}s
-                                            </div>
-                                        )
-                                    )}
+                                        </label>
+                                    ) : q.timeLimitSeconds ? (
+                                        <span className="ml-auto inline-flex items-center gap-1.5 font-pixel text-[10px] text-px-orange px-glow print:hidden">
+                                            <Timer className="size-3.5" aria-hidden />{q.timeLimitSeconds}s
+                                        </span>
+                                    ) : null}
                                 </div>
 
-                                <div className="ml-0 sm:ml-12">
+                                {isEditing ? (
+                                    <textarea aria-label={`Question ${index + 1}`} className="px-input mt-3 w-full resize-none text-xl font-semibold" onChange={(e) => handleQuestionChange(index, "questionText", e.target.value)} value={q.questionText} rows={3} />
+                                ) : (
+                                    <h2 className="mt-3 text-xl font-semibold leading-snug sm:text-2xl">{q.questionText}</h2>
+                                )}
+
+                                <div className="mt-4">
                                     {isEditing ? (
-                                        <div className="space-y-4">
-                                            {isIdentification ? (
-                                                <div>
-                                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Correct Answer</label>
-                                                    <textarea value={q.correctAnswer} onChange={(e) => handleQuestionChange(index, "correctAnswer", e.target.value)} className="w-full md:max-w-md p-3 border-2 border-slate-200 rounded-lg focus:border-[#4ce0a3] focus:outline-none font-medium text-slate-700 transition-colors resize-y" rows={2} />
-                                                </div>
-                                            ) : (
-                                                <div>
-                                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Options & Correct Answer</label>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                        {q.options.map((opt, optIdx) => (
-                                                            <div key={optIdx} className={`flex items-start gap-2 sm:gap-3 p-2 border-2 rounded-lg transition-colors ${q.correctAnswer === opt ? 'border-[#4ce0a3] bg-[#4ce0a3]/5' : 'border-slate-200'}`}>
-                                                                <input type="radio" name={`correct-answer-${index}`} checked={q.correctAnswer === opt} onChange={() => handleQuestionChange(index, "correctAnswer", opt)} className="w-4 h-4 text-[#4ce0a3] focus:ring-[#4ce0a3] cursor-pointer ml-1 sm:ml-2 shrink-0 mt-3" />
-                                                                <textarea value={opt} onChange={(e) => handleOptionChange(index, optIdx, e.target.value)} className="flex-1 p-2 bg-transparent border-none focus:ring-0 focus:outline-none font-medium text-slate-700 text-sm sm:text-base min-w-0 resize-y" placeholder={`Option ${optIdx + 1}`} rows={2} />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <>
-                                            {isIdentification ? (
-                                                <div className="w-full max-w-md">
-                                                    <input type="text" placeholder="Type your answer here..." value={userAnswers[index] || ''} onChange={(e) => handleAnswerSelect(index, e.target.value)} onBlur={() => handleIdentificationAnswerSubmit(index)} onKeyDown={(e) => handleIdentificationKeyDown(e, index)} className={`w-full p-3 border-b-2 bg-slate-50 focus:bg-white outline-none transition-colors text-slate-700 font-medium print:border-b print:border-black print:bg-transparent ${hasSelection ? (isCorrect ? 'border-emerald-500' : 'border-rose-500') : 'border-slate-300 focus:border-[#4ce0a3]'}`} />
-                                                    <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2 print:hidden">
-                                                        <button type="button" onClick={() => handleIdentificationAnswerSubmit(index)} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 w-full sm:w-auto text-center">Check answer</button>
-                                                        <span className="text-xs font-medium text-slate-400 text-center sm:text-left">Press Enter or click check when done.</span>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    {q.options.map((option, optIdx) => {
-                                                        const isSelected = userAnswers[index] === option;
-                                                        const isCorrectAnswer = option === q.correctAnswer;
-                                                        const optionClass = hasSelection ? isSelected && isCorrect ? 'border-[#4ce0a3] bg-[#4ce0a3]/10 text-slate-900' : isSelected && !isCorrect ? 'border-rose-500 bg-rose-50 text-slate-900' : isCorrectAnswer ? 'border-[#4ce0a3] bg-[#4ce0a3]/10 text-slate-900' : 'border-slate-200 text-slate-400 opacity-60' : isSelected ? 'border-[#4ce0a3] bg-[#4ce0a3]/10 text-slate-900' : 'border-slate-200 hover:border-slate-300 text-slate-600';
+                                        kind === "choice" ? (
+                                            <fieldset>
+                                                <legend className="mb-2 text-base font-semibold">Choices <span className="font-normal text-muted">(select the correct one)</span></legend>
+                                                <div className="grid gap-2 md:grid-cols-2">
+                                                    {q.options.map((opt, optIdx) => {
+                                                        const isRight = q.correctAnswer === opt;
                                                         return (
-                                                            <button key={optIdx} onClick={() => handleAnswerSelect(index, option)} disabled={hasSelection} className={`text-left p-3 sm:p-4 rounded-lg border-2 font-medium text-sm sm:text-base transition-all print:border-slate-300 duration-300 ${optionClass}`}>
-                                                                {option}
-                                                            </button>
+                                                            <div key={optIdx} className={`px-notch flex items-start gap-2 border-4 p-2 ${isRight ? "border-px-lime bg-raised" : "border-frame-strong bg-screen"}`}>
+                                                                <input type="radio" name={`correct-answer-${index}`} checked={isRight} onChange={() => handleQuestionChange(index, "correctAnswer", opt)} aria-label={`Mark choice ${String.fromCharCode(65 + optIdx)} correct`} className="mt-2.5 size-4 shrink-0 accent-[var(--px-a)]" />
+                                                                <textarea value={opt} onChange={(e) => handleOptionChange(index, optIdx, e.target.value)} className="min-w-0 flex-1 resize-y bg-transparent p-1 text-base text-fg outline-none" placeholder={`Choice ${String.fromCharCode(65 + optIdx)}`} rows={2} />
+                                                            </div>
                                                         );
                                                     })}
                                                 </div>
+                                            </fieldset>
+                                        ) : (
+                                            <label className="block text-base font-semibold">{kind === "essay" ? "Sample answer" : "Correct answer"}
+                                                <textarea value={q.correctAnswer} onChange={(e) => handleQuestionChange(index, "correctAnswer", e.target.value)} className="px-input mt-1.5 w-full resize-y md:max-w-lg" rows={kind === "essay" ? 4 : 2} />
+                                            </label>
+                                        )
+                                    ) : kind === "choice" ? (
+                                        <div className={`grid gap-2 ${q.options.length === 2 ? "sm:grid-cols-2" : "md:grid-cols-2"}`}>
+                                            {q.options.map((option, optIdx) => {
+                                                const isPicked = userAnswers[index] === option;
+                                                const isRightOne = option === q.correctAnswer;
+                                                const revealRight = (answered || includeAnswers) && isRightOne;
+                                                const state = answered
+                                                    ? (isPicked && result ? "correct" : isPicked ? "wrong" : isRightOne ? "correct" : "dim")
+                                                    : revealRight ? "correct" : "idle";
+                                                const shell =
+                                                    state === "correct" ? "border-px-void bg-px-lime text-px-void" :
+                                                    state === "wrong" ? "border-px-void bg-px-red text-px-void" :
+                                                    state === "dim" ? "border-frame-strong bg-surface opacity-45" :
+                                                    "border-frame-strong bg-surface hover:bg-raised";
+                                                return (
+                                                    <button
+                                                        key={optIdx}
+                                                        onClick={() => handleChoicePick(index, option)}
+                                                        disabled={answered}
+                                                        aria-pressed={isPicked}
+                                                        data-sfx="none"
+                                                        className={`px-notch flex items-center gap-3 border-4 py-2 pl-2 pr-3 text-left text-lg leading-tight disabled:cursor-default print:border-2 print:border-black print:bg-white print:text-black print:opacity-100 ${shell}`}
+                                                    >
+                                                        <span className={`px-notch flex size-8 shrink-0 items-center justify-center border-4 border-px-void font-pixel text-[10px] text-px-void print:border-2 ${state === "correct" || state === "wrong" ? "bg-px-snow" : KEY_FILL[optIdx % 4]}`}>
+                                                            {state === "correct" ? <Check className="size-4" strokeWidth={4} aria-hidden /> : state === "wrong" ? <X className="size-4" strokeWidth={4} aria-hidden /> : String.fromCharCode(65 + optIdx)}
+                                                        </span>
+                                                        <span className="min-w-0 flex-1">{option}</span>
+                                                        {state === "correct" && isPicked && <span className="font-pixel text-[10px] print:hidden">+100</span>}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : kind === "typed" ? (
+                                        <div className="max-w-lg">
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    aria-label={`Your answer to question ${index + 1}`}
+                                                    placeholder="Type your answer"
+                                                    value={userAnswers[index] || ''}
+                                                    onChange={(e) => handleAnswerSelect(index, e.target.value)}
+                                                    onKeyDown={(e) => handleIdentificationKeyDown(e, index)}
+                                                    disabled={answered}
+                                                    className={`px-input w-full print:border-0 print:border-b-2 print:border-black print:bg-transparent ${answered ? (result ? "border-px-lime" : "border-px-red") : ""}`}
+                                                />
+                                                {!answered && (
+                                                    <button type="button" onClick={() => handleIdentificationAnswerSubmit(index)} disabled={!(userAnswers[index] || '').trim()} data-sfx="none" className="px-btn px-btn-cyan shrink-0 print:hidden">Check</button>
+                                                )}
+                                            </div>
+                                            {!answered && <p className="mt-1.5 text-sm text-muted print:hidden">Press Enter to check. Capitals don&apos;t matter.</p>}
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <textarea
+                                                aria-label={`Draft your answer to question ${index + 1}`}
+                                                placeholder="Draft your answer here. Essays are graded by AI in live games and homework."
+                                                value={userAnswers[index] || ''}
+                                                onChange={(e) => handleAnswerSelect(index, e.target.value)}
+                                                rows={4}
+                                                className="px-input w-full resize-y print:min-h-40 print:border-2 print:border-black print:bg-transparent"
+                                            />
+                                            {!essayRevealed && !includeAnswers && (
+                                                <button type="button" onClick={() => setRevealedEssays((p) => ({ ...p, [index]: true }))} className="px-btn px-btn-sm px-btn-ghost mt-2 print:hidden">
+                                                    Compare with sample answer
+                                                </button>
                                             )}
-                                        </>
+                                        </div>
                                     )}
                                 </div>
 
                                 {showFeedback && (
-                                    <div className="ml-0 sm:ml-12 mt-6">
+                                    <div className="mt-5">
                                         {isEditing ? (
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Explanation</label>
-                                                <textarea value={q.explanation} onChange={(e) => handleQuestionChange(index, "explanation", e.target.value)} className="w-full p-3 border-2 border-slate-200 rounded-lg focus:border-[#4ce0a3] focus:outline-none text-slate-600 text-sm transition-colors resize-y" rows={3} />
-                                            </div>
+                                            <label className="block text-base font-semibold">Explanation
+                                                <textarea value={q.explanation} onChange={(e) => handleQuestionChange(index, "explanation", e.target.value)} className="px-input mt-1.5 w-full resize-y" rows={3} />
+                                            </label>
                                         ) : (
-                                            <div className={`p-4 sm:p-5 rounded-lg border print:border-black print:bg-transparent ${hasSelection ? (isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200') : 'bg-amber-50 border-amber-200'}`}>
-                                                <p className={`text-sm font-bold mb-2 ${hasSelection ? (isCorrect ? 'text-emerald-800 print:text-black' : 'text-rose-800 print:text-black') : 'text-amber-800 print:text-black'}`}>
-                                                    {hasSelection ? (isCorrect ? 'Correct!' : 'Not quite.') : 'Correct Answer:'} <span className="font-bold underline decoration-2 underline-offset-2 break-words">{q.correctAnswer}</span>
-                                                </p>
-                                                {hasSelection && !isCorrect && (
-                                                    <p className="text-sm mt-1 text-rose-700 print:text-slate-700 mb-3 break-words">
-                                                        <span className="font-semibold">Your answer:</span> {userAnswers[index] || submittedAnswers[index]}
+                                            <div className={`px-notch flex gap-3 border-4 bg-screen p-4 print:border-2 print:border-black print:bg-transparent ${result === true ? "border-px-lime" : result === false ? "border-px-red" : "border-frame-strong"}`}>
+                                                <span className="print:hidden"><HoloOrb mood={result === false ? "sad" : result === true ? "happy" : "idle"} scale={1} spin={false} /></span>
+                                                <div className="min-w-0 space-y-1.5">
+                                                    <p className="text-lg">
+                                                        <span className="font-pixel text-[11px]">
+                                                            {result === true ? "Correct!" : result === false ? "Not quite." : kind === "essay" ? "Sample answer" : "Answer"}
+                                                        </span>{" "}
+                                                        {kind !== "essay" && <span className="font-semibold">{q.correctAnswer}</span>}
                                                     </p>
-                                                )}
-                                                <div className="h-px w-full bg-black/5 my-3 hidden print:block"></div>
-                                                <p className={`text-sm leading-relaxed ${hasSelection ? (isCorrect ? 'text-emerald-700 print:text-slate-700' : 'text-rose-700 print:text-slate-700') : 'text-amber-700 print:text-slate-700'}`}>
-                                                    <span className="font-bold uppercase text-xs tracking-wider opacity-80 block mb-1">Explanation</span>
-                                                    {q.explanation}
-                                                </p>
+                                                    {kind === "essay" && <p className="text-base">{q.correctAnswer}</p>}
+                                                    {result === false && (
+                                                        <p className="text-base text-muted">You answered <span className="text-fg">{userAnswers[index] || submittedAnswers[index]}</span></p>
+                                                    )}
+                                                    {q.explanation && <p className="text-base text-muted">{q.explanation}</p>}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
                                 )}
-                            </div>
+                            </article>
                         );
                     })}
                 </div>
             </main>
 
-            {/* ========================================== */}
-            {/* Modal Overlays (Delete, Assign, Live) */}
-            {/* ========================================== */}
+            {/* ===== DIALOGS ===== */}
 
             {isDeleting && (
-                <div onClick={() => setIsDeleting(false)} className='bg-black/50 z-50 fixed inset-0 flex h-dvh items-center justify-center animate-in fade-in duration-200 p-4'>
-                    <div onClick={(e) => e.stopPropagation()} className='bg-white p-6 sm:p-8 flex flex-col items-center gap-4 rounded-xl max-w-sm w-full shadow-2xl'>
-                        <div className="bg-rose-100 p-3 rounded-full mb-2">
-                            <CircleX className='w-8 h-8 text-rose-600' />
-                        </div>
-                        <h3 className='text-xl sm:text-2xl font-bold text-slate-800'>Delete Quiz?</h3>
-                        <p className='text-center text-slate-500 mb-4 text-sm sm:text-base'>Are you sure you want to permanently delete this quiz? This action cannot be undone.</p>
-                        <div className='flex flex-col sm:flex-row gap-3 w-full'>
-                            <button onClick={() => setIsDeleting(false)} className='w-full sm:flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 rounded-lg transition-colors'>Cancel</button>
-                            <button onClick={handleDelete} className='w-full sm:flex-1 bg-rose-500 hover:bg-rose-600 text-white font-semibold py-3 rounded-lg transition-colors'>Confirm Delete</button>
-                        </div>
-                    </div>
-                </div>
+                <Dialog
+                    title="Delete this quiz?"
+                    size="sm"
+                    onClose={() => setIsDeleting(false)}
+                    actions={<>
+                        <button onClick={() => setIsDeleting(false)} className="px-btn px-btn-ghost">Cancel</button>
+                        <button onClick={handleDelete} data-sfx="wrong" className="px-btn px-btn-red">Delete quiz</button>
+                    </>}
+                >
+                    <p className="text-lg"><span className="font-semibold">{editedTitle}</span> and its questions will be deleted. Past reports stay. This can&apos;t be undone.</p>
+                </Dialog>
             )}
 
             {isAssigning && (
-                <div onClick={() => !generatedPin && setIsAssigning(false)} className='bg-black/50 z-50 fixed inset-0 flex h-dvh items-center justify-center animate-in fade-in duration-200 p-4'>
-                    <div onClick={(e) => e.stopPropagation()} className='z-[60] bg-white p-6 sm:p-8 flex flex-col items-center gap-4 rounded-xl shadow-2xl max-w-md w-full'>
-                        {!generatedPin ? (
-                            <>
-                                <div className="bg-amber-100 p-3 rounded-full mb-2">
-                                    <CalendarClock className="w-8 h-8 text-amber-600" />
-                                </div>
-                                <h2 className='text-xl sm:text-2xl font-bold text-slate-800'>Assign as Homework</h2>
-                                <p className='text-slate-500 text-center text-sm mb-2'>
-                                    Students can play at their own pace until the deadline.
-                                </p>
-                                <div className="w-full mb-4">
-                                    <label className="block text-xs sm:text-sm font-bold text-slate-700 uppercase tracking-wider mb-2">Due Date & Time</label>
-                                    <input
-                                        type="datetime-local"
-                                        value={dueDate}
-                                        onChange={(e) => setDueDate(e.target.value)}
-                                        className="w-full p-3 sm:p-4 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-[#4ce0a3] transition-colors text-slate-700 font-medium"
-                                    />
-                                </div>
-                                <div className='flex flex-col sm:flex-row gap-3 w-full mt-2'>
-                                    <button onClick={() => setIsAssigning(false)} className='w-full sm:flex-1 bg-slate-100 text-slate-700 font-semibold py-3 rounded-lg hover:bg-slate-200 transition-colors'>Cancel</button>
-                                    <button
-                                        onClick={handleCreateAssignment}
-                                        disabled={isCreatingSession}
-                                        className='w-full sm:flex-1 bg-[#4ce0a3] text-slate-900 font-bold py-3 rounded-lg hover:bg-[#3bc48b] transition flex justify-center items-center'
-                                    >
-                                        {isCreatingSession ? "Creating..." : "Create Link"}
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <h2 className='text-xl sm:text-2xl font-bold text-slate-800 text-center mb-2'>Assignment Ready!</h2>
-                                <p className='text-slate-500 text-center text-sm mb-4'>Share this PIN or link with your students.</p>
-                                <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-6 sm:p-8 w-full text-center mb-4">
-                                    <p className="text-xs sm:text-sm font-bold text-slate-400 mb-2 tracking-widest uppercase">GAME PIN</p>
-                                    <p className="text-5xl sm:text-6xl font-black text-slate-900 tracking-widest break-all">{generatedPin}</p>
-                                </div>
-                                <button
-                                    onClick={handleCopyLink}
-                                    className={`w-full flex items-center justify-center gap-2 py-3 sm:py-4 rounded-lg font-bold text-base sm:text-lg transition-colors ${isCopied ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
-                                >
-                                    {isCopied ? <Check className="w-5 h-5 sm:w-6 sm:h-6" /> : <Copy className="w-5 h-5 sm:w-6 sm:h-6" />}
-                                    {isCopied ? "Copied!" : "Copy Join Link"}
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setIsAssigning(false);
-                                        setGeneratedPin("");
-                                        setDueDate("");
-                                    }}
-                                    className="mt-3 text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors"
-                                >
-                                    Done
-                                </button>
-                            </>
-                        )}
-                    </div>
-                </div>
+                <Dialog
+                    title={generatedPin ? "Homework is live" : "Assign as homework"}
+                    onClose={closeAssign}
+                    locked={isCreatingSession}
+                    actions={generatedPin ? (
+                        <button onClick={closeAssign} className="px-btn px-btn-ghost">Done</button>
+                    ) : (<>
+                        <button onClick={closeAssign} className="px-btn px-btn-ghost">Cancel</button>
+                        <button onClick={handleCreateAssignment} disabled={isCreatingSession || !dueDate} data-sfx="start" className="px-btn px-btn-cyan">
+                            {isCreatingSession && <Loader2 className="size-4 animate-spin" aria-hidden />}
+                            Create join PIN
+                        </button>
+                    </>)}
+                >
+                    {!generatedPin ? (
+                        <div className="space-y-4">
+                            <p className="text-lg text-muted">Students play <span className="font-semibold text-fg">{editedTitle}</span> at their own pace until the deadline. Scores land in Reports.</p>
+                            <label className="block text-base font-semibold">Due date and time
+                                <input type="datetime-local" min={minDue} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="px-input mt-1.5 w-full" />
+                            </label>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <p className="text-lg text-muted">Share this PIN or the link with your class. Track who joined under Active assignments.</p>
+                            <p className="px-notch break-all bg-px-void px-4 py-6 text-center font-pixel text-3xl tracking-widest text-px-yellow sm:text-4xl">{generatedPin}</p>
+                            <button onClick={handleCopyLink} data-sfx="coin" className="px-btn px-btn-lg px-btn-yellow w-full">
+                                {isCopied ? <Check className="size-5" aria-hidden /> : <Copy className="size-5" aria-hidden />}
+                                {isCopied ? "Link copied" : "Copy join link"}
+                            </button>
+                        </div>
+                    )}
+                </Dialog>
             )}
 
             {isLaunchingLive && (
-                <div onClick={() => !isCreatingLive && setIsLaunchingLive(false)} className='bg-black/50 z-50 fixed inset-0 flex h-dvh items-center justify-center animate-in fade-in duration-200 p-4'>
-                    <div onClick={(e) => e.stopPropagation()} className='z-[60] bg-white p-6 sm:p-8 flex flex-col items-center gap-4 rounded-xl shadow-2xl max-w-md w-full'>
-                        <div className="bg-indigo-50 p-3 rounded-full mb-2">
-                            <Users className="w-8 h-8 text-indigo-500" />
+                <Dialog
+                    title="Host a live game"
+                    onClose={() => setIsLaunchingLive(false)}
+                    locked={isCreatingLive}
+                    actions={<>
+                        <button onClick={() => setIsLaunchingLive(false)} className="px-btn px-btn-ghost">Cancel</button>
+                        <button onClick={handleConfirmLiveLaunch} disabled={isCreatingLive} data-sfx="start" className="px-btn px-btn-pink">
+                            {isCreatingLive && <Loader2 className="size-4 animate-spin" aria-hidden />}
+                            Open lobby
+                        </button>
+                    </>}
+                >
+                    <div className="space-y-4">
+                        <p className="text-lg text-muted">Everyone joins <span className="font-semibold text-fg">{editedTitle}</span> with a PIN and answers each question at the same time.</p>
+                        <div role="radiogroup" aria-label="Game mode" className="grid grid-cols-2 gap-2">
+                            {([["SOLO", "Solo", "Every player for themselves"], ["FACTIONS", "Teams", "Players split into factions"]] as const).map(([mode, label, hint]) => (
+                                <button
+                                    key={mode}
+                                    role="radio"
+                                    aria-checked={gameMode === mode}
+                                    data-sfx="select"
+                                    onClick={() => setGameMode(mode)}
+                                    className={`px-notch flex flex-col items-start gap-1 border-4 p-3 text-left ${gameMode === mode ? "border-px-pink bg-raised" : "border-frame-strong bg-surface hover:bg-raised"}`}
+                                >
+                                    <span className="font-pixel text-[11px]">{label}</span>
+                                    <span className="text-base text-muted">{hint}</span>
+                                </button>
+                            ))}
                         </div>
-                        <h2 className='text-xl sm:text-2xl font-bold text-slate-800'>Host Live Game</h2>
-
-                        {/* Mode Toggle */}
-                        <div className="flex bg-slate-100 p-1 rounded-xl w-full mb-2">
-                            <button
-                                onClick={() => setGameMode("SOLO")}
-                                className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all ${gameMode === "SOLO" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-                            >
-                                Solo Free-for-all
-                            </button>
-                            <button
-                                onClick={() => setGameMode("FACTIONS")}
-                                className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all ${gameMode === "FACTIONS" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-                            >
-                                Team Factions
-                            </button>
-                        </div>
-
-                        {gameMode === "FACTIONS" ? (
-                            <div className="w-full animate-in slide-in-from-right-4 duration-300">
-                                <p className='text-slate-500 text-center text-sm mb-4'>
-                                    How many factions? The first {maxFactions} students to join will become Faction Leaders.
-                                </p>
-                                <div className="flex justify-between items-center bg-slate-50 p-2 rounded-2xl border-2 border-slate-100 mb-4 w-full">
+                        {gameMode === "FACTIONS" && (
+                            <div className="space-y-2">
+                                <p className="text-base font-semibold">Number of teams</p>
+                                <div role="radiogroup" aria-label="Number of teams" className="flex gap-2">
                                     {[2, 3, 4, 5, 6].map((num) => (
                                         <button
                                             key={num}
+                                            role="radio"
+                                            aria-checked={maxFactions === num}
+                                            data-sfx="select"
                                             onClick={() => setMaxFactions(num)}
-                                            className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl font-black text-lg transition-all ${maxFactions === num
-                                                ? "bg-slate-900 text-white shadow-md scale-110"
-                                                : "text-slate-400 hover:bg-slate-200 hover:text-slate-700"
-                                                }`}
+                                            className={`px-btn flex-1 ${maxFactions === num ? "px-btn-pink" : "px-btn-ghost"}`}
                                         >
                                             {num}
                                         </button>
                                     ))}
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="w-full text-center py-4 animate-in slide-in-from-left-4 duration-300">
-                                <p className='text-slate-500 text-sm'>
-                                    Every student for themselves! No teams will be created.
-                                </p>
+                                <p className="text-base text-muted">The first {maxFactions} players to join become team leaders.</p>
                             </div>
                         )}
-
-                        <div className='flex flex-col sm:flex-row gap-3 w-full mt-2'>
-                            <button
-                                onClick={() => setIsLaunchingLive(false)}
-                                className='w-full sm:flex-1 bg-slate-100 text-slate-700 font-semibold py-3 rounded-lg hover:bg-slate-200 transition-colors'
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleConfirmLiveLaunch}
-                                disabled={isCreatingLive}
-                                className='w-full sm:flex-1 bg-indigo-500 text-white font-bold py-3 rounded-lg hover:bg-indigo-600 transition flex justify-center items-center'
-                            >
-                                {isCreatingLive ? <Loader2 className="w-5 h-5 animate-spin" /> : "Open Lobby"}
-                            </button>
-                        </div>
                     </div>
-                </div>
+                </Dialog>
             )}
         </div>
     );

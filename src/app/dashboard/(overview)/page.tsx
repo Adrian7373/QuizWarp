@@ -1,128 +1,114 @@
 import { Suspense } from "react";
+import Link from "next/link";
+import { Search, X } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import prisma from "@/lib/prisma";
 import NavBar from "@/app/_components/NavBar";
 import { getUser } from "@/app/actions";
-import Link from "next/link";
-import { Calendar, CheckCircle2, Clock, FileQuestion, Layers, PlayCircle, Trophy, Users, Loader2 } from "lucide-react";
-import { formatDistanceToNow, format } from "date-fns";
-import EndSessionButton from "../_components/EndSessionButton";
 import ActiveLiveWidget from "../../_components/ActiveLiveWidget";
-import DeleteSessionButton from "../_components/DeleteSessionButton";
 import GenerateNewButton from "../_components/GenerateNewButton";
-import CopyLinkButton from "../_components/CopyLinkButton";
 import QuizCard from "../_components/QuizCard";
 import RewardTracker from "../_components/RewardTracker";
-import StreakWidget from "../_components/StreakWidget";
 import Pagination from "../_components/Pagination";
+import PlayerHud from "../_components/PlayerHud";
+import { AssignmentRow, ReportRow } from "../_components/SessionRows";
+import { ASSIGNMENT_COLUMNS, EmptyState, LIBRARY_COLUMNS, Ledger, REPORT_COLUMNS, ROW } from "../_components/Ledger";
 
 interface DashboardProps {
-    searchParams: Promise<{ tab?: string, page?: string }>;
+    searchParams: Promise<{ tab?: string, page?: string, q?: string }>;
 }
 
 type UserRole = "TEACHER" | "STUDENT";
-const ITEMS_PER_PAGE = 9;
+type Tab = "quizzes" | "assignments" | "reports";
+const ITEMS_PER_PAGE = 10;
 
 // ==========================================
-// 1. LOADING SKELETONS
+// 1. QUERY FILTERS (shared by the tab counts and the lists)
 // ==========================================
 
-function DashboardLoading() {
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {[...Array(9)].map((_, i) => (
-                <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm h-48 flex flex-col">
-                    <div className="flex justify-between items-start gap-4 mb-3">
-                        <div className="h-6 w-3/4 bg-slate-200 rounded animate-pulse" />
-                        <div className="h-6 w-16 bg-slate-100 rounded-md animate-pulse shrink-0" />
-                    </div>
-                    <div className="space-y-2 mb-auto">
-                        <div className="h-4 w-full bg-slate-100 rounded animate-pulse" />
-                        <div className="h-4 w-5/6 bg-slate-100 rounded animate-pulse" />
-                    </div>
-                    <div className="flex items-center gap-3 pt-4 border-t border-slate-100 mt-4">
-                        <div className="h-8 w-16 bg-slate-100 rounded-lg animate-pulse" />
-                        <div className="h-8 w-16 bg-slate-100 rounded-lg animate-pulse" />
-                        <div className="h-4 w-20 bg-slate-100 rounded ml-auto animate-pulse" />
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
+const libraryWhere = (userId: string, q?: string) => ({
+    creatorId: userId,
+    isDeleted: false,
+    ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
+});
 
-function AssignmentsSkeleton() {
+const assignmentsWhere = (userId: string) => ({
+    hostId: userId,
+    status: "IN_PROGRESS" as const,
+    mode: "ASYNC" as const,
+    NOT: { joinCode: { startsWith: "PRAC-" } },
+    OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: new Date() } }
+    ]
+});
+
+const reportsWhere = (userId: string) => ({
+    hostId: userId,
+    NOT: { joinCode: { startsWith: "PRAC-" } },
+    OR: [
+        { status: "FINISHED" as const },
+        {
+            status: "IN_PROGRESS" as const,
+            mode: "ASYNC" as const,
+            expiresAt: { lte: new Date() }
+        }
+    ]
+});
+
+const sessionInclude = {
+    quiz: { select: { title: true } },
+    _count: { select: { participants: true } }
+};
+
+// ==========================================
+// 2. LOADING SKELETON
+// ==========================================
+
+function RowsSkeleton({ rows, columns }: { rows: number, columns: string }) {
     return (
-        <div className="flex flex-col gap-4">
-            {[...Array(3)].map((_, i) => (
-                <div key={i} className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex flex-col xsm:flex-row items-start xsm:items-center gap-4 sm:gap-5 w-full">
-                        <div className="bg-slate-100 rounded-xl w-full xsm:w-[130px] h-[92px] shrink-0 animate-pulse border border-slate-200" />
-                        <div className="w-full space-y-3">
-                            <div className="h-6 w-3/4 sm:w-1/2 bg-slate-200 rounded-md animate-pulse" />
-                            <div className="flex gap-4">
-                                <div className="h-4 w-20 bg-slate-100 rounded animate-pulse" />
-                                <div className="h-4 w-32 bg-slate-100 rounded animate-pulse" />
-                            </div>
+        <div className="px-panel" aria-hidden>
+            <div className="hidden h-10 border-b-4 border-frame bg-raised lg:block" />
+            <ul className="divide-y-4 divide-frame">
+                {[...Array(rows)].map((_, i) => (
+                    <li key={i} className={`${ROW} ${columns}`}>
+                        <div className="space-y-2">
+                            <div className="h-4 w-2/3 bg-raised px-notch" />
+                            <div className="h-3.5 w-1/2 bg-raised px-notch" />
                         </div>
-                    </div>
-                    <div className="flex gap-2 w-full sm:w-auto shrink-0 mt-2 sm:mt-0">
-                        <div className="h-11 flex-1 sm:w-32 bg-slate-100 rounded-lg animate-pulse" />
-                        <div className="h-11 w-11 bg-rose-100 rounded-lg animate-pulse shrink-0" />
-                    </div>
-                </div>
-            ))}
+                        <div className="h-4 w-20 bg-raised px-notch" />
+                        <div className="hidden h-4 w-8 justify-self-end bg-raised px-notch lg:block" />
+                        <div className="hidden h-4 w-8 justify-self-end bg-raised px-notch lg:block" />
+                        <div className="h-9 w-48 bg-raised px-notch lg:justify-self-end" />
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 }
 
-function ReportsSkeleton() {
-    return (
-        <div className="flex flex-col gap-4">
-            {[...Array(5)].map((_, i) => (
-                <div key={i} className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-start sm:items-center gap-4 sm:gap-5 w-full">
-                        <div className="bg-slate-100 p-3 sm:px-4 sm:py-3 rounded-lg shrink-0 w-12 h-12 sm:w-16 sm:h-16 animate-pulse" />
-                        <div className="w-full space-y-2">
-                            <div className="h-5 w-3/4 bg-slate-200 rounded animate-pulse" />
-                            <div className="flex gap-4">
-                                <div className="h-4 w-24 bg-slate-100 rounded animate-pulse" />
-                                <div className="h-4 w-32 bg-slate-100 rounded animate-pulse" />
-                            </div>
-                        </div>
-                    </div>
-                    <div className="h-10 w-full sm:w-32 bg-slate-200 rounded-lg animate-pulse shrink-0" />
-                </div>
-            ))}
-        </div>
-    );
+function getTabSkeleton(tab: Tab) {
+    if (tab === "assignments") return <RowsSkeleton rows={3} columns={ASSIGNMENT_COLUMNS} />;
+    if (tab === "reports") return <RowsSkeleton rows={5} columns={REPORT_COLUMNS} />;
+    return <RowsSkeleton rows={6} columns={LIBRARY_COLUMNS} />;
 }
 
-function getTabSkeleton(tab: string) {
-    switch (tab) {
-        case "assignments": return <AssignmentsSkeleton />;
-        case "reports": return <ReportsSkeleton />;
-        case "quizzes":
-        default: return <DashboardLoading />;
-    }
-}
-
-
 // ==========================================
-// 2. DATA FETCHING COMPONENT (Wrapped in Suspense)
+// 3. DATA FETCHING COMPONENT (Wrapped in Suspense)
 // ==========================================
 
-async function TabContent({ currentTab, authUser, skip, currentPage, userRole }: {
-    currentTab: string,
-    authUser: any,
+async function TabContent({ currentTab, userId, skip, currentPage, userRole, q }: {
+    currentTab: Tab,
+    userId: string,
     skip: number,
     currentPage: number,
-    userRole: UserRole
+    userRole: UserRole,
+    q?: string,
 }) {
 
-    // --- TAB 1: QUIZZES ---
+    // --- TAB 1: LIBRARY ---
     if (currentTab === "quizzes") {
-        const whereClause = { creatorId: authUser.id, isDeleted: false }
+        const whereClause = libraryWhere(userId, q);
         const [quizzes, totalCount] = await prisma.$transaction([
             prisma.quiz.findMany({
                 where: whereClause,
@@ -141,184 +127,71 @@ async function TabContent({ currentTab, authUser, skip, currentPage, userRole }:
             prisma.quiz.count({ where: whereClause })
         ]);
 
-        const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-
         if (quizzes.length === 0) {
-            return (
-                <div className="bg-white border border-slate-200 rounded-xl p-8 sm:p-12 text-center flex flex-col items-center">
-                    <div className="bg-indigo-50 p-4 rounded-full mb-4">
-                        <FileQuestion className="w-8 h-8 text-indigo-500" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-slate-800">Your library is empty</h3>
-                    <p className="text-slate-500 mt-2 mb-6 max-w-md text-sm sm:text-base">
-                        You haven't created any quizzes yet. Click the "Generate Quiz" button to build your first AI-powered assessment.
-                    </p>
-                </div>
+            return q ? (
+                <EmptyState mood="sad" say={`No quiz titles match “${q}”. Try a shorter word.`}>
+                    <Link href="?tab=quizzes" className="px-btn px-btn-ghost">Clear search</Link>
+                </EmptyState>
+            ) : (
+                <EmptyState say="Your library is empty. Paste some notes and I'll build your first quiz.">
+                    <GenerateNewButton userId={userId} />
+                </EmptyState>
             );
         }
 
         return (
             <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                {q && <p className="mb-3 text-base text-muted">{totalCount} {totalCount === 1 ? "quiz matches" : "quizzes match"} “{q}”</p>}
+                <Ledger columns={LIBRARY_COLUMNS} headers={["Quiz", "Level", "Questions", "Plays", ""]} right={["Questions", "Plays"]}>
                     {quizzes.map((quiz) => (
-                        <QuizCard
-                            key={quiz.id}
-                            quiz={quiz}
-                            userId={authUser.id}
-                            userRole={userRole}
-                        />
+                        <QuizCard key={quiz.id} quiz={quiz} userId={userId} userRole={userRole} />
                     ))}
-                </div>
-                <Pagination currentPage={currentPage} totalPages={totalPages} tab={currentTab} />
+                </Ledger>
+                <Pagination currentPage={currentPage} totalPages={Math.ceil(totalCount / ITEMS_PER_PAGE)} tab={currentTab} q={q} />
             </>
         );
     }
 
     // --- TAB 2: ACTIVE ASSIGNMENTS ---
     if (currentTab === "assignments") {
-        const whereClause = {
-            hostId: authUser.id,
-            status: "IN_PROGRESS" as const,
-            mode: "ASYNC" as const,
-            NOT: { joinCode: { startsWith: "PRAC-" } },
-            OR: [
-                { expiresAt: null },
-                { expiresAt: { gt: new Date() } }
-            ]
-        }
-
-        const [activeSessions, totalCount] = await prisma.$transaction([
-            prisma.gameSession.findMany({
-                where: whereClause,
-                orderBy: { createdAt: 'desc' },
-                include: {
-                    quiz: { select: { title: true } },
-                    _count: { select: { participants: true } }
-                }
-            }),
-            prisma.gameSession.count({ where: whereClause })
-        ]);
+        const activeSessions = await prisma.gameSession.findMany({
+            where: assignmentsWhere(userId),
+            orderBy: { expiresAt: 'asc' }, // soonest deadline first
+            include: sessionInclude
+        });
 
         if (activeSessions.length === 0) {
             return (
-                <div className="bg-white border border-slate-200 rounded-xl p-8 sm:p-12 text-center flex flex-col items-center">
-                    <div className="bg-amber-100 p-4 rounded-full mb-4">
-                        <PlayCircle className="w-8 h-8 text-amber-500" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-slate-800">No active assignments</h3>
-                    <p className="text-slate-500 mt-2 mb-6 max-w-md text-sm sm:text-base">You don't have any running homework sessions. Open a quiz from your library and click "Assign" to generate a Game PIN.</p>
-                </div>
+                <EmptyState say="No homework is running. Pick a quiz in your Library and press Assign to get a join PIN.">
+                    <Link href="?tab=quizzes" className="px-btn px-btn-ghost">Go to Library</Link>
+                </EmptyState>
             );
         }
 
+        const now = Date.now();
         return (
-            <div className="flex flex-col gap-4">
-                {activeSessions.map((session) => (
-                    <div key={session.id} className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-amber-300 transition-colors">
-                        <div className="flex flex-col xsm:flex-row items-start xsm:items-center gap-4 sm:gap-5 w-full">
-                            <div className="bg-slate-100 p-3 rounded-xl text-center w-full xsm:w-auto min-w-[130px] shrink-0 flex flex-col justify-center border border-slate-200 shadow-inner">
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Game PIN</p>
-                                <p className="text-2xl font-black text-slate-900 tracking-widest">{session.joinCode}</p>
-                                <CopyLinkButton joinCode={session.joinCode} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <h3 className="text-lg font-bold text-slate-800 truncate">{session.quiz.title}</h3>
-                                <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm text-slate-500 mt-1">
-                                    <span className="flex items-center gap-1.5 shrink-0"><Users className="w-4 h-4" /> {session._count.participants} Joined</span>
-                                    <span className="flex items-center gap-1.5 shrink-0">
-                                        <Clock className="w-4 h-4" />
-                                        {session.expiresAt ? `Due ${format(new Date(session.expiresAt), 'MMM d, h:mm a')}` : 'No due date'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex gap-2 w-full sm:w-auto shrink-0 mt-2 sm:mt-0">
-                            <Link href={`/dashboard/reports/${session.id}`} className="flex-1 sm:flex-none flex items-center justify-center text-center bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-4 py-2.5 rounded-lg transition-colors">
-                                View Progress
-                            </Link>
-                            <div className="shrink-0 flex items-center justify-center">
-                                <EndSessionButton sessionId={session.id} hostId={authUser.id} />
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+            <Ledger columns={ASSIGNMENT_COLUMNS} headers={["Join PIN", "Quiz", "Joined", "Deadline", ""]} right={["Joined"]}>
+                {activeSessions.map((session) => <AssignmentRow key={session.id} session={session} now={now} />)}
+            </Ledger>
         );
     }
 
     // --- TAB 3: COMPLETED REPORTS ---
     if (currentTab === "reports") {
-        const whereClause = {
-            hostId: authUser.id,
-            NOT: { joinCode: { startsWith: "PRAC-" } },
-            OR: [
-                { status: "FINISHED" as const },
-                {
-                    status: "IN_PROGRESS" as const,
-                    mode: "ASYNC" as const,
-                    expiresAt: { lte: new Date() }
-                }
-            ]
-        }
-
-        const [completedSessions, totalCount] = await prisma.$transaction([
-            prisma.gameSession.findMany({
-                where: whereClause,
-                orderBy: { createdAt: 'desc' },
-                include: {
-                    quiz: { select: { title: true } },
-                    _count: { select: { participants: true } }
-                }
-            }),
-            prisma.gameSession.count({ where: whereClause })
-        ]);
+        const completedSessions = await prisma.gameSession.findMany({
+            where: reportsWhere(userId),
+            orderBy: { createdAt: 'desc' },
+            include: sessionInclude
+        });
 
         if (completedSessions.length === 0) {
-            return (
-                <div className="bg-white border border-slate-200 rounded-xl p-8 sm:p-12 text-center flex flex-col items-center">
-                    <div className="bg-slate-100 p-4 rounded-full mb-4">
-                        <Trophy className="w-8 h-8 text-slate-400" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-slate-800">No completed reports</h3>
-                    <p className="text-slate-500 mt-2 mb-6 max-w-md text-sm sm:text-base">
-                        When an active assignment ends, the final report with grades and leaderboards will appear here.
-                    </p>
-                </div>
-            );
+            return <EmptyState say="No reports yet. When a live game or homework ends, the scores land here." />;
         }
 
         return (
-            <div className="flex flex-col gap-4">
-                {completedSessions.map((session) => (
-                    <div key={session.id} className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-300 transition-colors">
-                        <div className="flex items-start sm:items-center gap-4 sm:gap-5">
-                            <div className="bg-slate-50 border border-slate-100 p-3 sm:px-4 sm:py-3 rounded-lg text-center shrink-0">
-                                <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-500 mx-auto" />
-                            </div>
-                            <div className="min-w-0">
-                                <h3 className="text-base sm:text-lg font-bold text-slate-800 line-clamp-2">{session.quiz.title}</h3>
-                                <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm text-slate-500 mt-1">
-                                    <span className="flex items-center gap-1.5 shrink-0">
-                                        <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {session._count.participants} Played
-                                    </span>
-                                    <span className="flex items-center gap-1.5 shrink-0">
-                                        <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                        Ended {formatDistanceToNow(new Date(session.createdAt), { addSuffix: true })}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto mt-2 sm:mt-0 shrink-0">
-                            <Link href={`/dashboard/reports/${session.id}`} className="flex-1 sm:flex-none flex items-center justify-center text-center bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 sm:px-6 py-2.5 rounded-lg transition-colors text-sm sm:text-base">
-                                View Final Grades
-                            </Link>
-                            <div className="shrink-0">
-                                <DeleteSessionButton sessionId={session.id} hostId={authUser.id} />
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+            <Ledger columns={REPORT_COLUMNS} headers={["Quiz", "Mode", "Players", "When", ""]} right={["Players"]}>
+                {completedSessions.map((session) => <ReportRow key={session.id} session={session} />)}
+            </Ledger>
         );
     }
 
@@ -327,14 +200,15 @@ async function TabContent({ currentTab, authUser, skip, currentPage, userRole }:
 
 
 // ==========================================
-// 3. MAIN PAGE SHELL (Loads Instantly)
+// 4. MAIN PAGE SHELL (Loads Instantly)
 // ==========================================
 
 export default async function DashboardPage({ searchParams }: DashboardProps) {
-    const { tab, page } = await searchParams;
-    const currentTab = tab || "quizzes";
+    const { tab, page, q: rawQ } = await searchParams;
+    const currentTab: Tab = tab === "assignments" || tab === "reports" ? tab : "quizzes";
+    const q = rawQ?.trim() || undefined;
 
-    const currentPage = Number(page) || 1;
+    const currentPage = Math.max(1, Number(page) || 1);
     const skip = (currentPage - 1) * ITEMS_PER_PAGE;
 
     const supabase = await createClient();
@@ -345,79 +219,84 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
         throw new Error("Unauthorized");
     }
 
-    let appUser = null;
-    const userResponse = await getUser(authUser.id);
-    if (userResponse.user) {
-        appUser = userResponse.user;
-    }
+    const [userResponse, counts] = await Promise.all([
+        getUser(authUser.id),
+        prisma.$transaction([
+            prisma.quiz.count({ where: libraryWhere(authUser.id) }),
+            prisma.gameSession.count({ where: assignmentsWhere(authUser.id) }),
+            prisma.gameSession.count({ where: reportsWhere(authUser.id) }),
+        ]),
+    ]);
+    const appUser = userResponse.user ?? null;
+    const userRole: UserRole = appUser?.role === "TEACHER" ? "TEACHER" : "STUDENT";
+    const [libraryCount, assignmentCount, reportCount] = counts;
 
-    let userRole: UserRole = "STUDENT";
-    if (appUser?.id) {
-        const { role } = await prisma.user.findUnique({
-            where: { id: appUser.id },
-            select: { role: true }
-        }) || {};
-
-        if (role) userRole = role as UserRole;
-    }
+    const tabs: { id: Tab; label: string; count: number }[] = [
+        { id: "quizzes", label: "Library", count: libraryCount },
+        { id: "assignments", label: "Active", count: assignmentCount },
+        { id: "reports", label: "Reports", count: reportCount },
+    ];
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col items-center">
+        <div className="px-crt min-h-dvh bg-bg font-sans text-fg">
             <NavBar user={appUser} />
-            <StreakWidget streak={appUser?.currentStreak ?? 0} />
             <RewardTracker userId={authUser.id} />
             <ActiveLiveWidget userId={authUser.id} />
 
-            <main className="flex-1 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto w-full pb-12">
+            <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-24 sm:px-6">
 
-                {/* Responsive Header */}
-                <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-end gap-5 mb-8">
-                    <div>
-                        <h1 className="text-4xl font-bold text-slate-900">My Quizzes</h1>
-                        <p className="text-slate-500 mt-1 text-sm sm:text-base">Manage, host, and assign your generated content.</p>
-                    </div>
+                <PlayerHud
+                    userId={authUser.id}
+                    name={appUser?.name ?? null}
+                    role={userRole}
+                    credits={appUser?.aiCredits ?? 0}
+                    streak={appUser?.currentStreak ?? 0}
+                />
 
-                    <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-                        <Link
-                            href="/dashboard/bank"
-                            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-sm sm:text-base rounded-xl border border-indigo-100 transition-all sm:hover:scale-105 shrink-0"
-                        >
-                            <Layers className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                            <span className="whitespace-nowrap">Question Bank</span>
-                        </Link>
-                        <GenerateNewButton userId={authUser.id} />
-                    </div>
+                <div className="mb-4 mt-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <nav aria-label="Dashboard sections" className="flex flex-wrap gap-2">
+                        {tabs.map((t) => {
+                            const active = currentTab === t.id;
+                            return (
+                                <Link
+                                    key={t.id}
+                                    href={`?tab=${t.id}`}
+                                    aria-current={active ? "page" : undefined}
+                                    data-sfx="select"
+                                    className={`px-btn ${active ? "px-btn-cyan" : "px-btn-ghost"}`}
+                                >
+                                    {t.label}
+                                    <span className={`px-notch px-1.5 py-1 text-[9px] ${active ? "bg-px-void text-px-snow" : "bg-bg text-fg"}`}>{t.count}</span>
+                                </Link>
+                            );
+                        })}
+                    </nav>
+
+                    {currentTab === "quizzes" && libraryCount > 0 && (
+                        <form action="/dashboard" role="search" className="flex w-full gap-2 lg:w-auto">
+                            <input type="hidden" name="tab" value="quizzes" />
+                            <label className="relative flex-1 lg:w-80 lg:flex-none">
+                                <span className="sr-only">Search your quizzes</span>
+                                <Search className="pointer-events-none absolute left-4 top-1/2 z-10 size-4 -translate-y-1/2 text-muted" aria-hidden />
+                                <input type="search" name="q" defaultValue={q} placeholder="Search your quizzes" className="px-input w-full py-1.5 pl-10" />
+                            </label>
+                            {q ? (
+                                <Link href="?tab=quizzes" className="px-btn px-btn-ghost" aria-label="Clear search"><X className="size-4" aria-hidden /></Link>
+                            ) : (
+                                <button type="submit" className="px-btn px-btn-ghost">Search</button>
+                            )}
+                        </form>
+                    )}
                 </div>
 
-                {/* Tabs */}
-                <div className="flex gap-6 border-b border-slate-200 mb-8 overflow-x-auto no-scrollbar whitespace-nowrap">
-                    <Link
-                        href="?tab=quizzes"
-                        className={`pb-3 font-semibold text-sm transition-colors border-b-2 shrink-0 ${currentTab === 'quizzes' ? 'border-[#4ce0a3] text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                    >
-                        My Library
-                    </Link>
-                    <Link
-                        href="?tab=assignments"
-                        className={`pb-3 font-semibold text-sm transition-colors border-b-2 shrink-0 ${currentTab === 'assignments' ? 'border-[#4ce0a3] text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Active Assignments
-                    </Link>
-                    <Link
-                        href="?tab=reports"
-                        className={`pb-3 font-semibold text-sm transition-colors border-b-2 shrink-0 ${currentTab === 'reports' ? 'border-[#4ce0a3] text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Completed Reports
-                    </Link>
-                </div>
-
-                <Suspense key={`${currentTab}-${currentPage}`} fallback={getTabSkeleton(currentTab)}>
+                <Suspense key={`${currentTab}-${currentPage}-${q ?? ""}`} fallback={getTabSkeleton(currentTab)}>
                     <TabContent
                         currentTab={currentTab}
-                        authUser={authUser}
+                        userId={authUser.id}
                         skip={skip}
                         currentPage={currentPage}
                         userRole={userRole}
+                        q={q}
                     />
                 </Suspense>
 

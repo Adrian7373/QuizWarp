@@ -1,12 +1,10 @@
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import NavBar from "@/app/_components/NavBar";
 import { getUser } from "@/app/actions";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import ReportData from "./_components/ReportData";
-import { Suspense } from "react";
 import ReportSkeleton from "./_components/ReportSkeleton";
-import { resolve } from "node:dns";
 
 interface ReportPageProps {
     params: Promise<{ sessionId: string }>;
@@ -15,32 +13,21 @@ interface ReportPageProps {
 export default async function ReportPage({ params }: ReportPageProps) {
     const { sessionId } = await params;
 
-    // 1. Authenticate the User
+    // The proxy already guards /dashboard; this covers a session that expired mid-visit.
     const supabase = await createClient();
     const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) redirect("/login");
 
-    if (!authUser) throw new Error("Please log in first.");
-
-    let appUser = null;
     const userResponse = await getUser(authUser.id);
-    if (userResponse.user) appUser = userResponse.user;
-
-
+    const appUser = userResponse.user ?? null;
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col font-inter">
+        <div className="px-crt min-h-dvh bg-bg font-sans text-fg">
             <NavBar user={appUser} />
-
-            <main className="flex-1 pt-24 px-6 md:px-12 max-w-5xl mx-auto w-full pb-12">
-                {/* Header Section */}
-                <div className="mb-8">
-                    <Link href="/dashboard?tab=assignments" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#4ce0a3] transition-colors font-semibold text-sm mb-4">
-                        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-                    </Link>
-                    <Suspense fallback={<ReportSkeleton />}>
-                        <ReportData userId={appUser?.id ?? ""} sessionId={sessionId} />
-                    </Suspense>
-                </div>
+            <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-24 sm:px-6">
+                <Suspense fallback={<ReportSkeleton />}>
+                    <ReportData userId={authUser.id} sessionId={sessionId} />
+                </Suspense>
             </main>
         </div>
     );

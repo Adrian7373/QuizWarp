@@ -1,67 +1,64 @@
 "use client"
 
-import { FileSpreadsheet } from "lucide-react"
+import { Download } from "lucide-react"
 import toast from "react-hot-toast"
 
-// Define the shape of the data we need
-interface ParticipantData {
+interface ParticipantRow {
     nickname: string;
     totalScore: number;
     maxStreak: number;
-    faction?: { name: string } | null;
+    faction: string | null;
+    correct: number;
+    accuracy: number;
 }
 
 interface ExportCsvButtonProps {
     quizTitle: string;
-    participants: ParticipantData[];
+    totalQuestions: number;
+    participants: ParticipantRow[];
 }
 
-export default function ExportCsvButton({ quizTitle, participants }: ExportCsvButtonProps) {
+/**
+ * Quote a CSV cell. Inner quotes are doubled, and a leading = + - @ is defused so a
+ * nickname can't run as a formula when the file is opened in a spreadsheet.
+ */
+function cell(value: string | number) {
+    let text = String(value);
+    if (typeof value === "string" && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+}
 
-    // The logic lives inside the Client Component now!
+export default function ExportCsvButton({ quizTitle, totalQuestions, participants }: ExportCsvButtonProps) {
     const handleExportCsv = () => {
-        if (!participants || participants.length === 0) {
-            toast.error("No data to export!");
+        if (participants.length === 0) {
+            toast.error("No scores to export yet.");
             return;
         }
 
-        const headers = ["Rank", "Nickname", "Faction/Team", "Total Score", "Max Streak"];
-        const sortedParticipants = [...participants].sort((a, b) => b.totalScore - a.totalScore);
+        const headers = ["Rank", "Nickname", "Faction", "Score", "Correct", "Questions", "Accuracy %", "Best streak"];
+        const rows = [...participants]
+            .sort((a, b) => b.totalScore - a.totalScore)
+            .map((p, index) => [index + 1, p.nickname, p.faction ?? "Solo", p.totalScore, p.correct, totalQuestions, p.accuracy, p.maxStreak]);
 
-        const rows = sortedParticipants.map((p, index) => [
-            index + 1,
-            p.nickname,
-            p.faction?.name || "Solo",
-            p.totalScore,
-            p.maxStreak || 0
-        ]);
+        const csv = [headers, ...rows].map(row => row.map(cell).join(",")).join("\n");
 
-        const csvContent = [
-            headers.join(","),
-            ...rows.map(row => row.map(value => `"${value}"`).join(","))
-        ].join("\n");
-
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        // The BOM makes Excel read names with accents correctly.
+        const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-
-        link.setAttribute("href", url);
-        link.setAttribute("download", `${quizTitle.replace(/\s+/g, '_')}_Results.csv`);
+        link.href = url;
+        link.download = `${quizTitle.replace(/[^\w-]+/g, "_")}_results.csv`;
         document.body.appendChild(link);
         link.click();
-
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
 
-        toast.success("CSV Downloaded!");
+        toast.success("Results downloaded");
     };
 
     return (
-        <button
-            onClick={handleExportCsv}
-            className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-6 max-h-sm rounded-xl transition-all active:scale-95 shadow-md shadow-slate-900/20"
-        >
-            <FileSpreadsheet className="w-5 h-5 text-[#4ce0a3]" />
+        <button type="button" onClick={handleExportCsv} disabled={participants.length === 0} className="px-btn px-btn-ghost">
+            <Download className="size-4" aria-hidden />
             Export CSV
         </button>
     )

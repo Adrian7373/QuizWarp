@@ -36,7 +36,6 @@ export default async function HostPage({ params }: HostPageProps) {
             joinCode={session.joinCode}
             quizTitle={session.quiz.title}
             initialParticipants={session.participants}
-            hostId={user.id}
         />
     );
 }

@@ -48,7 +48,7 @@ export default function LoginModal({ onClose, onCreateAccount }: LoginModalProps
     return (
         <div
             onClick={onClose}
-            className="bg-black/50 z-50 fixed inset-0 flex justify-center items-center w-full min-h-dvh px-4"
+            className="bg-black/50 z-[90] fixed inset-0 flex justify-center items-center w-full min-h-dvh px-4"
         >
             <div
                 onClick={(event) => event.stopPropagation()}

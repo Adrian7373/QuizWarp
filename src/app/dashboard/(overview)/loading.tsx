@@ -1,65 +1,37 @@
-import { Loader2 } from "lucide-react";
-
+// Route-level loading screen for the dashboard, shaped like the real page.
 export default function DashboardLoading() {
+    const block = "px-notch bg-raised";
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col items-center">
-            {/* Top Bar Skeleton */}
-            <div className="w-full h-24 bg-darker border-b border-slate-200 mb-8" />
+        <div className="px-crt min-h-dvh bg-bg font-sans" aria-hidden>
+            <div className="h-16 border-b-4 border-frame bg-bg" />
 
-            <div className="w-full h-32 mb-5 bg-slate-200 rounded-lg animate-pulse max-w-3xl"></div>
-
-            <main className="flex-1 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto w-full pb-12">
-
-                {/* Header Skeleton */}
-                <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-end gap-5 mb-8">
-                    <div className="space-y-2">
-                        <div className="h-10 w-48 bg-slate-200 rounded-lg animate-pulse" />
-                        <div className="h-5 w-64 bg-slate-200 rounded-lg animate-pulse" />
-                    </div>
-
-                    <div className="flex gap-3 w-full sm:w-auto">
-                        <div className="h-11 w-32 bg-slate-200 rounded-xl animate-pulse" />
-                        <div className="h-11 w-40 bg-indigo-100 rounded-xl animate-pulse" />
-                    </div>
+            <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6">
+                {/* Player HUD */}
+                <div className="px-panel flex flex-wrap items-center gap-6 p-5">
+                    <div className={`size-14 ${block}`} />
+                    <div className="space-y-2"><div className={`h-3 w-32 ${block}`} /><div className={`h-6 w-48 ${block}`} /></div>
+                    <div className="ml-auto flex gap-2"><div className={`h-11 w-40 ${block}`} /><div className={`h-11 w-40 ${block}`} /></div>
                 </div>
 
-                {/* Tabs Skeleton */}
-                <div className="flex gap-6 border-b border-slate-200 mb-8">
-                    <div className="h-6 w-24 bg-slate-200 rounded animate-pulse mb-2" />
-                    <div className="h-6 w-32 bg-slate-200 rounded animate-pulse mb-2" />
-                    <div className="h-6 w-32 bg-slate-200 rounded animate-pulse mb-2" />
+                {/* Tabs */}
+                <div className="mb-4 mt-8 flex gap-2">
+                    <div className={`h-11 w-32 ${block}`} /><div className={`h-11 w-28 ${block}`} /><div className={`h-11 w-32 ${block}`} />
                 </div>
 
-                {/* Grid of Skeleton Cards (Matches your 9 items per page) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                    {[...Array(9)].map((_, i) => (
-                        <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm h-48 flex flex-col">
-                            {/* Card Header */}
-                            <div className="flex justify-between items-start gap-4 mb-3">
-                                <div className="h-6 w-3/4 bg-slate-200 rounded animate-pulse" />
-                                <div className="h-6 w-16 bg-slate-100 rounded-md animate-pulse shrink-0" />
-                            </div>
-
-                            {/* Card Body */}
-                            <div className="space-y-2 mb-auto">
-                                <div className="h-4 w-full bg-slate-100 rounded animate-pulse" />
-                                <div className="h-4 w-5/6 bg-slate-100 rounded animate-pulse" />
-                            </div>
-
-                            {/* Card Footer */}
-                            <div className="flex items-center gap-3 pt-4 border-t border-slate-100 mt-4">
-                                <div className="h-8 w-16 bg-slate-100 rounded-lg animate-pulse" />
-                                <div className="h-8 w-16 bg-slate-100 rounded-lg animate-pulse" />
-                                <div className="h-4 w-20 bg-slate-100 rounded ml-auto animate-pulse" />
-                            </div>
-                        </div>
-                    ))}
+                {/* List */}
+                <div className="px-panel">
+                    <div className="hidden h-10 border-b-4 border-frame bg-raised lg:block" />
+                    <ul className="divide-y-4 divide-frame">
+                        {[...Array(6)].map((_, i) => (
+                            <li key={i} className="flex items-center justify-between gap-4 px-4 py-4">
+                                <div className="w-full max-w-md space-y-2"><div className={`h-4 w-2/3 ${block}`} /><div className={`h-3.5 w-1/2 ${block}`} /></div>
+                                <div className={`hidden h-9 w-56 sm:block ${block}`} />
+                            </li>
+                        ))}
+                    </ul>
                 </div>
 
-                {/* Loading Spinner at the bottom for good measure */}
-                <div className="flex justify-center mt-12">
-                    <Loader2 className="w-8 h-8 text-[#4ce0a3] animate-spin" />
-                </div>
+                <p className="px-label px-blink mt-6 text-center text-muted">Loading</p>
             </main>
         </div>
     );
