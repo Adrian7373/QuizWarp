@@ -1,245 +1,102 @@
 "use client"
 
-import { useState, useEffect } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { createQuizFromBank } from "@/app/actions";
-import { Search, CheckSquare, Square, Layers, X, Loader2, ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
-import Link from "next/link";
-import toast from "react-hot-toast";
+import { Check } from "lucide-react";
+import { useBankSelection, type PickedQuestion } from "./BankSelection";
+import { TYPE_META, isBankType, type BankQuestionType } from "./types";
 
-interface QuestionBankGridProps {
-    questions: any[];
-    userId: string;
-    currentPage: number;
-    totalPages: number;
-    totalCount: number;
-    initialSearch: string;
-}
+type BankQuestion = {
+    id: string;
+    questionType: string;
+    questionText: string;
+    options: unknown;
+    correctAnswer: string;
+    quiz: { title: string };
+};
 
-export default function QuestionBankGrid({
-    questions,
-    userId,
-    currentPage,
-    totalPages,
-    totalCount,
-    initialSearch
-}: QuestionBankGridProps) {
+const toPick = (q: BankQuestion): PickedQuestion => ({
+    id: q.id,
+    questionText: q.questionText,
+    questionType: (isBankType(q.questionType) ? q.questionType : "MULTIPLE_CHOICE") as BankQuestionType,
+    quizTitle: q.quiz.title,
+});
 
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const pathname = usePathname();
-
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    // Modal State
-    const [isCreating, setIsCreating] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [newTitle, setNewTitle] = useState("");
-    const [newDesc, setNewDesc] = useState("");
-
-    // --- Pagination Handlers ---
-    const handlePageChange = (newPage: number) => {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('page', newPage.toString());
-        router.push(`${pathname}?${params.toString()}`);
-    };
-
-    // --- Selection Logic ---
-    const toggleSelection = (id: string) => {
-        const newSet = new Set(selectedIds);
-        if (newSet.has(id)) newSet.delete(id);
-        else newSet.add(id);
-        setSelectedIds(newSet);
-    };
-
-    const selectAllOnPage = () => {
-        const pageIds = questions.map(q => q.id);
-        const allSelected = pageIds.every(id => selectedIds.has(id));
-        const newSet = new Set(selectedIds);
-
-        if (allSelected) {
-            // Deselect all on current page
-            pageIds.forEach(id => newSet.delete(id));
-        } else {
-            // Select all on current page
-            pageIds.forEach(id => newSet.add(id));
-        }
-        setSelectedIds(newSet);
-    };
-
-    // --- Submit Logic ---
-    const handleCompileQuiz = async () => {
-        if (!newTitle) return toast.error("Please enter a title for the new quiz.");
-
-        setIsSubmitting(true);
-        const response = await createQuizFromBank(
-            userId,
-            newTitle,
-            newDesc,
-            Array.from(selectedIds)
-        );
-
-        if (response.error) {
-            toast.error(response.error);
-            setIsSubmitting(false);
-        } else {
-            toast.success("Quiz compiled successfully!");
-            router.push('/dashboard');
-        }
-    };
+/** A page of questions the player can pick from. Picks live in BankSelectionProvider, above this page. */
+export default function QuestionBankGrid({ questions, totalCount }: { questions: BankQuestion[]; totalCount: number }) {
+    const { isPicked, toggle, pickMany, unpickMany } = useBankSelection();
+    const allOnPagePicked = questions.length > 0 && questions.every((q) => isPicked(q.id));
 
     return (
-        <div className="relative">
-            {/* List Controls */}
-            <div className="flex justify-between items-center mb-4 px-2">
-                <span className="text-sm font-bold text-slate-500">
-                    Showing {questions.length} of {totalCount} matching questions
-                </span>
+        <div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-base text-muted">
+                    Showing {questions.length} of {totalCount} {totalCount === 1 ? "question" : "questions"}
+                </p>
                 <button
-                    onClick={selectAllOnPage}
-                    className="text-sm font-bold text-indigo-500 hover:text-indigo-600 transition-colors disabled:opacity-50"
-                    disabled={questions.length === 0}
+                    type="button"
+                    onClick={() => allOnPagePicked ? unpickMany(questions.map((q) => q.id)) : pickMany(questions.map(toPick))}
+                    data-sfx="select"
+                    className="px-btn px-btn-sm px-btn-ghost"
                 >
-                    {questions.every(q => selectedIds.has(q.id)) && questions.length > 0
-                        ? "Deselect Page"
-                        : "Select All on Page"}
+                    {allOnPagePicked ? "Unpick this page" : "Pick this page"}
                 </button>
             </div>
 
-            {/* Questions Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {questions.map((q) => {
-                    const isSelected = selectedIds.has(q.id);
-                    return (
-                        <div
-                            key={q.id}
-                            onClick={() => toggleSelection(q.id)}
-                            className={`p-5 rounded-xl border-2 cursor-pointer transition-all duration-200 flex gap-4 ${isSelected
-                                ? 'border-[#4ce0a3] bg-[#4ce0a3]/5 shadow-md'
-                                : 'border-slate-200 bg-white hover:border-slate-300'
-                                }`}
-                        >
-                            <div className="shrink-0 mt-1">
-                                {isSelected ? (
-                                    <CheckSquare className="w-6 h-6 text-[#4ce0a3]" />
-                                ) : (
-                                    <Square className="w-6 h-6 text-slate-300" />
-                                )}
-                            </div>
-                            <div className="min-w-0">
-                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1 truncate">
-                                    From: {q.quiz.title}
-                                </span>
-                                <h3 className="text-slate-800 font-bold text-lg leading-snug mb-3">
-                                    {q.questionText}
-                                </h3>
-                                <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                    <span className="font-semibold text-emerald-600">Answer: </span>
-                                    {q.correctAnswer}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* Empty State */}
-            {questions.length === 0 && (
-                <div className="text-center p-12 bg-white border border-slate-200 rounded-xl mt-4">
-                    <p className="text-slate-500 font-medium">
-                        {initialSearch ? "No questions found matching your search." : "Your question bank is empty."}
-                    </p>
-                </div>
-            )}
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-4 mt-8">
-                    <button
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage <= 1}
-                        className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-                    >
-                        <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <span className="text-sm font-bold text-slate-500">
-                        Page {currentPage} of {totalPages}
-                    </span>
-                    <button
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage >= totalPages}
-                        className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-                    >
-                        <ChevronRight className="w-5 h-5" />
-                    </button>
-                </div>
-            )}
-
-            {/* FLOATING ACTION BAR */}
-            {selectedIds.size > 0 && (
-                <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl bg-slate-900 rounded-2xl shadow-2xl p-4 flex items-center justify-between animate-in slide-in-from-bottom-10 z-40 border border-slate-700">
-                    <div className="flex items-center gap-3 ml-2">
-                        <div className="bg-[#4ce0a3]/20 p-2 rounded-lg">
-                            <Layers className="w-5 h-5 text-[#4ce0a3]" />
-                        </div>
-                        <div className="text-white">
-                            <span className="font-black text-lg">{selectedIds.size}</span>
-                            <span className="text-slate-400 font-medium ml-1">Selected</span>
-                        </div>
-                    </div>
-
-                    <button
-                        onClick={() => setIsCreating(true)}
-                        className="bg-[#4ce0a3] hover:bg-[#3bc48b] text-slate-900 font-bold px-6 py-2.5 rounded-xl transition-colors"
-                    >
-                        Compile New Quiz
-                    </button>
-                </div>
-            )}
-
-            {/* COMPILE MODAL */}
-            {isCreating && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-black text-slate-800">Name Your Quiz</h2>
-                            <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-slate-600">
-                                <X className="w-6 h-6" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-4 mb-8">
-                            <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Title</label>
-                                <input
-                                    type="text"
-                                    value={newTitle}
-                                    onChange={(e) => setNewTitle(e.target.value)}
-                                    placeholder="e.g. Midterm Review"
-                                    className="w-full p-3 border-2 border-slate-200 rounded-lg focus:border-[#4ce0a3] focus:outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Description (Optional)</label>
-                                <textarea
-                                    value={newDesc}
-                                    onChange={(e) => setNewDesc(e.target.value)}
-                                    placeholder="Combined from past lessons..."
-                                    className="w-full p-3 border-2 border-slate-200 rounded-lg focus:border-[#4ce0a3] focus:outline-none resize-none"
-                                    rows={2}
-                                />
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={handleCompileQuiz}
-                            disabled={isSubmitting}
-                            className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
-                        >
-                            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Save & Generate Quiz"}
-                        </button>
-                    </div>
-                </div>
-            )}
+            <ul className="grid gap-3 md:grid-cols-2">
+                {questions.map((q) => (
+                    <QuestionCard key={q.id} q={q} picked={isPicked(q.id)} onToggle={() => toggle(toPick(q))} />
+                ))}
+            </ul>
         </div>
+    );
+}
+
+function QuestionCard({ q, picked, onToggle }: { q: BankQuestion; picked: boolean; onToggle: () => void }) {
+    const type = isBankType(q.questionType) ? q.questionType : "MULTIPLE_CHOICE";
+    const meta = TYPE_META[type];
+    const options = Array.isArray(q.options) ? (q.options as unknown[]).map(String) : [];
+
+    return (
+        <li className={`px-panel flex flex-col ${picked ? "border-px-cyan bg-raised" : "hover:bg-raised/60"}`}>
+            {/* The whole top area is the checkbox's label, so a click or Space anywhere picks it */}
+            <label className="flex flex-1 cursor-pointer gap-3 p-4">
+                <input type="checkbox" checked={picked} onChange={onToggle} data-sfx="select" className="peer sr-only" />
+                <span
+                    aria-hidden
+                    className={`px-notch mt-0.5 flex size-6 shrink-0 items-center justify-center border-4 peer-focus-visible:border-px-cyan ${picked ? "border-px-void bg-px-cyan text-px-void" : "border-frame-strong bg-screen"}`}
+                >
+                    {picked && <Check className="size-3.5" strokeWidth={4} />}
+                </span>
+                <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                        <span className={`px-notch px-1.5 py-1 font-pixel text-[9px] text-px-void ${meta.fill}`}>{meta.label}</span>
+                        <span className="min-w-0 truncate text-sm text-muted">from {q.quiz.title}</span>
+                    </span>
+                    <span className="mt-2 line-clamp-3 block text-lg font-semibold leading-snug">{q.questionText}</span>
+                    <span className="mt-2 block text-base">
+                        <span className="text-muted">Answer </span>
+                        <span className="font-semibold">{q.correctAnswer || "Graded by AI"}</span>
+                    </span>
+                </span>
+            </label>
+
+            {options.length > 0 && type !== "TRUE_FALSE" && (
+                <details className="group border-t-4 border-frame px-4 py-2">
+                    <summary className="cursor-pointer list-none text-sm text-muted hover:text-fg [&::-webkit-details-marker]:hidden">
+                        <span className="group-open:hidden">Show {options.length} choices</span>
+                        <span className="hidden group-open:inline">Hide choices</span>
+                    </summary>
+                    <ul className="mt-2 grid gap-1 pb-1 sm:grid-cols-2">
+                        {options.map((o, i) => (
+                            <li key={i} className={`flex items-start gap-2 text-base ${o === q.correctAnswer ? "font-semibold" : "text-muted"}`}>
+                                <span className={`mt-0.5 flex size-5 shrink-0 items-center justify-center font-pixel text-[8px] text-px-void px-notch ${o === q.correctAnswer ? "bg-px-lime" : "bg-px-fog"}`}>
+                                    {o === q.correctAnswer ? <Check className="size-3" strokeWidth={4} aria-hidden /> : String.fromCharCode(65 + i)}
+                                </span>
+                                <span className="min-w-0">{o}{o === q.correctAnswer && <span className="sr-only"> (correct)</span>}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </details>
+            )}
+        </li>
     );
 }

@@ -1,78 +1,96 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { ArrowLeft, Search } from "lucide-react";
+import { Search, X } from "lucide-react";
+import { BANK_TYPES, TYPE_META, type BankQuestionType } from "./types";
 
 interface BankControlsProps {
-    initialSearch: string,
-    initialType: string
+    initialSearch: string;
+    initialType: BankQuestionType | "ALL";
+    /** Questions per type across the whole bank, for the chip counts. */
+    counts: Record<BankQuestionType | "ALL", number>;
 }
 
-export default function QuestionBankControls({ initialSearch, initialType }: BankControlsProps) {
-
+export default function QuestionBankControls({ initialSearch, initialType, counts }: BankControlsProps) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
-    const [selectedQuestionType, setSelectedQuestionType] = useState("ALL");
     const [searchInput, setSearchInput] = useState(initialSearch);
 
-    // --- Debounced URL Update ---
+    // Follow the URL when it changes from outside (e.g. a "Clear filters" link).
+    useEffect(() => { setSearchInput(initialSearch); }, [initialSearch]);
+
+    const pushParams = (mutate: (p: URLSearchParams) => void, replace = false) => {
+        const params = new URLSearchParams(searchParams.toString());
+        mutate(params);
+        params.delete("page"); // a new search or filter starts on page 1
+        const url = `${pathname}${params.size ? `?${params}` : ""}`;
+        if (replace) router.replace(url); else router.push(url);
+    };
+
+    // Debounced search while typing (replace, so each keystroke isn't a history entry).
     useEffect(() => {
+        if (searchInput.trim() === initialSearch) return;
         const timer = setTimeout(() => {
-            const params = new URLSearchParams(searchParams.toString());
-            let hasChanges = false;
-
-            // Handle Search Text Changes
-            if (searchInput !== initialSearch) {
-                if (searchInput) params.set('search', searchInput);
-                else params.delete('search');
-                hasChanges = true;
-            }
-
-            if (selectedQuestionType !== initialType) {
-                if (selectedQuestionType !== "ALL") params.set('type', selectedQuestionType);
-                else params.delete('type');
-                hasChanges = true;
-            }
-
-            if (hasChanges) {
-                params.set('page', '1'); // Always reset to page 1 on a new search/filter
-                router.push(`${pathname}?${params.toString()}`);
-            }
-        }, 500);
-
+            pushParams((p) => { if (searchInput.trim()) p.set("search", searchInput.trim()); else p.delete("search"); }, true);
+        }, 400);
         return () => clearTimeout(timer);
-    }, [searchInput, selectedQuestionType, pathname, router, searchParams, initialSearch, initialType]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchInput, initialSearch]);
 
+    const setType = (type: BankQuestionType | "ALL") => {
+        pushParams((p) => { if (type === "ALL") p.delete("type"); else p.set("type", type); });
+    };
 
-    return (<div className="mb-8">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    const chips: { id: BankQuestionType | "ALL"; label: string; btn: string }[] = [
+        { id: "ALL", label: "All", btn: "px-btn-cyan" },
+        ...BANK_TYPES.map((t) => ({ id: t, label: TYPE_META[t].label, btn: TYPE_META[t].btn })),
+    ];
 
-            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-                <div className="relative w-full md:w-96">
-                    <Search className="w-5 h-5 absolute left-3 top-3.5 text-slate-400" />
-                    <input
-                        type="text"
-                        placeholder="Search questions or quiz titles..."
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-[#4ce0a3] focus:outline-none transition-colors"
-                    />
-                </div>
-                <div className="shrink-0 w-full sm:w-48">
-                    <select
-                        value={selectedQuestionType}
-                        onChange={(e) => setSelectedQuestionType(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-[#4ce0a3] focus:outline-none transition-colors bg-white font-semibold text-slate-700 cursor-pointer appearance-none"
+    return (
+        <div className="flex flex-col gap-4">
+            <label className="relative block">
+                <span className="sr-only">Search questions or quiz titles</span>
+                <Search className="pointer-events-none absolute left-4 top-1/2 z-10 size-4 -translate-y-1/2 text-muted" aria-hidden />
+                <input
+                    type="search"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    placeholder="Search questions or quiz titles"
+                    className="px-input w-full py-2 pl-10 pr-11 [&::-webkit-search-cancel-button]:hidden"
+                />
+                {searchInput && (
+                    <button
+                        type="button"
+                        onClick={() => { setSearchInput(""); pushParams((p) => p.delete("search")); }}
+                        aria-label="Clear search"
+                        className="absolute right-3 top-1/2 z-10 -translate-y-1/2 text-muted hover:text-fg"
                     >
-                        <option value="ALL">All Types</option>
-                        <option value="MULTIPLE_CHOICE">Multiple Choice</option>
-                        <option value="TRUE_FALSE">True/False</option>
-                        <option value="IDENTIFICATION">Identification</option>
-                        <option value="ESSAY">Essay</option>
-                    </select>
-                </div>
+                        <X className="size-4" aria-hidden />
+                    </button>
+                )}
+            </label>
+
+            <div role="radiogroup" aria-label="Question type" className="flex flex-wrap gap-2">
+                {chips.map((c) => {
+                    const active = initialType === c.id;
+                    return (
+                        <button
+                            key={c.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            data-sfx="select"
+                            onClick={() => setType(c.id)}
+                            disabled={!active && counts[c.id] === 0}
+                            className={`px-btn px-btn-sm ${active ? c.btn : "px-btn-ghost"}`}
+                        >
+                            {c.label}
+                            <span className={`px-notch px-1 py-0.5 ${active ? "bg-px-void text-px-snow" : "bg-bg text-fg"}`}>{counts[c.id]}</span>
+                        </button>
+                    );
+                })}
             </div>
         </div>
-    </div>)
+    );
 }

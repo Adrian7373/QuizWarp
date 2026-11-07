@@ -4,15 +4,20 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 interface PaginationProps {
     currentPage: number;
     totalPages: number;
-    tab: string;
+    tab?: string;
     /** Active search, kept across pages. */
     q?: string;
+    /** Any other URL params to keep across pages (e.g. the bank's search and type). Empty values are dropped. */
+    params?: Record<string, string | undefined>;
 }
 
-export default function Pagination({ currentPage, totalPages, tab, q }: PaginationProps) {
+export default function Pagination({ currentPage, totalPages, tab, q, params }: PaginationProps) {
     if (totalPages <= 1) return null;
 
-    const href = (page: number) => `?${new URLSearchParams({ tab, page: String(page), ...(q ? { q } : {}) })}`;
+    const keep = Object.fromEntries(
+        Object.entries({ tab, q, ...params }).filter((e): e is [string, string] => !!e[1])
+    );
+    const href = (page: number) => `?${new URLSearchParams({ ...keep, page: String(page) })}`;
     const atStart = currentPage <= 1;
     const atEnd = currentPage >= totalPages;
 

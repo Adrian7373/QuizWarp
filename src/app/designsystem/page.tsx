@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import Sprite from '../_components/arcade/Sprite'
 import HoloOrb from '../_components/arcade/HoloOrb'
 import { HERO, ICON_HOMEWORK, ICON_LIVE, ICON_REPORTS, ICON_STUDY } from '../_components/arcade/sprites'
@@ -10,6 +11,9 @@ import SfxPreview from './SfxPreview'
 import PlayerHud from '../dashboard/_components/PlayerHud'
 import QuizRow from '../dashboard/_components/QuizCard'
 import { AssignmentRow, ReportRow } from '../dashboard/_components/SessionRows'
+import { BankSelectionProvider, PickTray } from '../dashboard/bank/_components/BankSelection'
+import QuestionBankControls from '../dashboard/bank/_components/QuestionBankControls'
+import QuestionBankGrid from '../dashboard/bank/_components/QuestionBankGrid'
 import { ASSIGNMENT_COLUMNS, EmptyState, LIBRARY_COLUMNS, Ledger, REPORT_COLUMNS } from '../dashboard/_components/Ledger'
 
 export const metadata: Metadata = {
@@ -31,6 +35,12 @@ const SAMPLE_SESSIONS = [
     { id: 'r2', joinCode: 'QW0919', mode: 'ASYNC', createdAt: ago(240), expiresAt: ago(100), quiz: { title: 'Cell biology review' }, _count: { participants: 21 } },
 ]
 
+const SAMPLE_BANK = [
+    { id: 'b1', questionType: 'MULTIPLE_CHOICE', questionText: 'Which organelle carries out photosynthesis in plant cells?', options: ['Mitochondria', 'Chloroplast', 'Ribosome', 'Nucleus'], correctAnswer: 'Chloroplast', quiz: { title: 'Cell biology review' } },
+    { id: 'b2', questionType: 'TRUE_FALSE', questionText: 'The Treaty of Versailles was signed in 1919.', options: ['True', 'False'], correctAnswer: 'True', quiz: { title: 'World War II causes' } },
+    { id: 'b3', questionType: 'IDENTIFICATION', questionText: 'What do you call the bottom number of a fraction?', options: [], correctAnswer: 'Denominator', quiz: { title: 'Fractions warm-up' } },
+    { id: 'b4', questionType: 'ESSAY', questionText: 'Explain how the cell membrane controls what enters and leaves the cell.', options: [], correctAnswer: '', quiz: { title: 'Cell biology review' } },
+]
 const PALETTE = [
     { i: '0', name: 'Void', hex: '#0B0817', role: 'Cabinet screen, outlines, ink on paper' },
     { i: '1', name: 'Night', hex: '#1A1433', role: 'Panels on the cabinet' },
@@ -72,7 +82,7 @@ function Sub({ children }: { children: React.ReactNode }) {
 }
 
 export default function ArcadeDesignSystem() {
-    const nav = [['palette', 'Palette'], ['type', 'Type'], ['controls', 'Controls'], ['hud', 'HUD'], ['quiz', 'Quiz'], ['mascots', 'Mascots'], ['fx', 'Effects'], ['dashboard', 'Dashboard'], ['rules', 'Rules']]
+    const nav = [['palette', 'Palette'], ['type', 'Type'], ['controls', 'Controls'], ['hud', 'HUD'], ['quiz', 'Quiz'], ['mascots', 'Mascots'], ['fx', 'Effects'], ['dashboard', 'Dashboard'], ['bank', 'Bank'], ['rules', 'Rules']]
 
     return (
         <div className="px-crt min-h-dvh bg-bg font-sans text-fg">
@@ -300,6 +310,20 @@ export default function ArcadeDesignSystem() {
                         </Ledger>
                         <EmptyState say="No homework is running. Pick a quiz in your Library and press Assign to get a join PIN." />
                     </div>
+                </Section>
+
+                <Section id="bank" title="Question bank" intro="The bank is a pick-and-build screen. Each question shows its type color, source quiz and answer; picks collect in a tray at the bottom and survive paging and filters. These are the real components with sample questions, so building a quiz here will fail.">
+                    <BankSelectionProvider userId="designsystem-sample">
+                        <div className="px-panel p-4">
+                            <Suspense fallback={null}>
+                                <QuestionBankControls initialSearch="" initialType="ALL" counts={{ ALL: 124, MULTIPLE_CHOICE: 80, TRUE_FALSE: 22, IDENTIFICATION: 14, ESSAY: 8 }} />
+                            </Suspense>
+                        </div>
+                        <div className="mt-6">
+                            <QuestionBankGrid questions={SAMPLE_BANK} totalCount={124} />
+                        </div>
+                        <PickTray userId="designsystem-sample" />
+                    </BankSelectionProvider>
                 </Section>
 
                 <Section id="rules" title="Rules">

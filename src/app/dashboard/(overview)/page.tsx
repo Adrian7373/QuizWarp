@@ -277,7 +277,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
                             <input type="hidden" name="tab" value="quizzes" />
                             <label className="relative flex-1 lg:w-80 lg:flex-none">
                                 <span className="sr-only">Search your quizzes</span>
-                                <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
+                                <Search className="pointer-events-none absolute left-4 top-1/2 z-10 size-4 -translate-y-1/2 text-muted" aria-hidden />
                                 <input type="search" name="q" defaultValue={q} placeholder="Search your quizzes" className="px-input w-full py-1.5 pl-10" />
                             </label>
                             {q ? (
