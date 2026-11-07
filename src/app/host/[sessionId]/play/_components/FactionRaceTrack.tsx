@@ -1,6 +1,6 @@
 "use client"
 
-import { Flag, Users, Trophy } from "lucide-react";
+import { Flag } from "lucide-react";
 
 interface Faction {
     id: string;
@@ -19,95 +19,76 @@ interface FactionRaceTrackProps {
     participants: Participant[];
 }
 
-// A dynamic palette for the teams
-const DYNAMIC_COLORS = [
-    "bg-rose-500 shadow-rose-500/50",
-    "bg-blue-500 shadow-blue-500/50",
-    "bg-emerald-500 shadow-emerald-500/50",
-    "bg-amber-400 shadow-amber-400/50",
-    "bg-purple-500 shadow-purple-500/50",
-    "bg-cyan-500 shadow-cyan-500/50",
-];
+// Each faction keeps one lane color for the whole game (by join order, not by rank, so colors don't swap
+// when teams overtake each other). Pink is left out: it means "live" on this screen.
+const LANE_COLORS = ["bg-px-cyan", "bg-px-orange", "bg-px-lime", "bg-px-purple", "bg-px-blue", "bg-px-red"];
+
+const formatPoints = (n: number) => n.toLocaleString("en-US");
 
 export default function FactionRaceTrack({ factions, participants }: FactionRaceTrackProps) {
-    // 1. Calculate total scores for each faction
-    const factionScores = factions.map(faction => {
-        const score = participants
-            .filter(p => p.factionId === faction.id)
-            .reduce((sum, p) => sum + p.totalScore, 0);
-
+    // 1. Total score and head count per faction, with its stable color
+    const factionScores = factions.map((faction, i) => {
+        const members = participants.filter(p => p.factionId === faction.id);
         return {
             ...faction,
-            score
+            color: LANE_COLORS[i % LANE_COLORS.length],
+            members: members.length,
+            score: members.reduce((sum, p) => sum + p.totalScore, 0),
         };
     });
 
     // 2. Sort by score (highest at the top)
     const sortedFactions = [...factionScores].sort((a, b) => b.score - a.score);
 
-    // 3. Find the highest score to calculate the progress bar percentages dynamically
-    // We set a minimum of 1000 so the bars don't fly to 100% on the very first question
+    // 3. Scale the track to the leader. A floor of 1000 keeps the bars from jumping to full on the first question.
     const maxScore = Math.max(...sortedFactions.map(f => f.score), 1000);
 
     return (
-        <div className="w-full bg-slate-900 rounded-3xl p-8 border-4 border-slate-800 shadow-2xl relative overflow-hidden">
-            {/* Background dressing */}
-            <div className="absolute top-0 right-0 p-16 opacity-5 pointer-events-none">
-                <Flag className="w-64 h-64 text-white" />
-            </div>
-
-            <div className="flex justify-between items-center mb-10 border-b-2 border-slate-800 pb-6 relative z-10">
-                <h2 className="text-4xl font-black text-white flex items-center gap-4 uppercase tracking-widest">
-                    <Users className="text-indigo-400 w-10 h-10" />
-                    Faction War
+        <section aria-labelledby="race-heading" className="px-panel flex flex-col">
+            <div className="flex items-center justify-between gap-3 border-b-4 border-frame px-4 py-3 sm:px-5">
+                <h2 id="race-heading" className="flex items-center gap-3 font-pixel text-sm sm:text-base">
+                    <Flag className="size-5 text-px-yellow" aria-hidden />
+                    Faction race
                 </h2>
-                <div className="bg-slate-800 px-6 py-2 rounded-full flex items-center gap-3 border border-slate-700">
-                    <Trophy className="text-amber-400 w-5 h-5" />
-                    <span className="text-slate-300 font-bold tracking-widest text-sm uppercase">Live Standings</span>
-                </div>
+                <span className="px-label text-muted">Team points</span>
             </div>
 
-            <div className="flex flex-col gap-10 relative z-10">
-                {sortedFactions.map((faction, index) => {
-                    // Calculate width percentage (cap at 100%, minimum 5% so the score is visible)
-                    const progressPercentage = Math.max(5, Math.min((faction.score / maxScore) * 100, 100));
+            {sortedFactions.length === 0 ? (
+                <p className="px-5 py-8 text-center text-lg text-muted">No factions in this game.</p>
+            ) : (
+                <ol className="flex flex-col gap-5 p-4 sm:p-5">
+                    {sortedFactions.map((faction, index) => {
+                        // Width relative to the leader; at least 3% so an empty lane still shows its color.
+                        const progress = Math.max(3, Math.min((faction.score / maxScore) * 100, 100));
+                        const isLeader = index === 0 && faction.score > 0;
 
-                    // Assign a color based on their sorted position
-                    const colorClass = DYNAMIC_COLORS[index % DYNAMIC_COLORS.length];
-                    const isLeader = index === 0 && faction.score > 0;
-
-                    return (
-                        <div key={faction.id} className="relative">
-
-                            {/* Track Background */}
-                            <div className="w-full h-20 bg-slate-800/80 rounded-r-3xl border-y-2 border-r-2 border-slate-700 relative overflow-hidden flex items-center shadow-inner">
-
-                                {/* Animated Progress Bar */}
-                                <div
-                                    className={`h-full ${colorClass} shadow-[0_0_30px_rgba(0,0,0,0.3)] transition-all duration-1000 ease-out flex items-center justify-end px-6 relative`}
-                                    style={{ width: `${progressPercentage}%` }}
-                                >
-                                    {/* Shimmer effect on the bar */}
-                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-full animate-[shimmer_2s_infinite]"></div>
-
-                                    <span className="text-white font-black text-3xl drop-shadow-lg relative z-10">
-                                        {faction.score.toLocaleString()}
+                        return (
+                            <li key={faction.id} className="flex flex-col gap-2">
+                                <div className="flex items-baseline gap-3">
+                                    <span className={`px-notch shrink-0 px-1.5 py-1 font-pixel text-[10px] ${isLeader ? "bg-px-yellow text-px-void" : "bg-raised text-fg"}`}>
+                                        {index + 1}
+                                        <span className="sr-only">{index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"} place</span>
                                     </span>
+                                    <span className="min-w-0 flex-1 truncate text-xl font-semibold sm:text-2xl" title={faction.name}>{faction.name}</span>
+                                    <span className="hidden text-base text-muted sm:inline">{faction.members} {faction.members === 1 ? "player" : "players"}</span>
+                                    <span className="font-pixel text-base text-fg px-glow sm:text-xl">{formatPoints(faction.score)}</span>
                                 </div>
-
-                                {/* Track Lines (Visual dressing) */}
-                                <div className="absolute inset-0 opacity-10 bg-[repeating-linear-gradient(45deg,transparent,transparent_15px,#fff_15px,#fff_30px)] pointer-events-none mix-blend-overlay"></div>
-                            </div>
-
-                            {/* Custom Team Name Label */}
-                            <div className="absolute -top-7 left-2 font-black text-slate-300 text-lg uppercase tracking-widest flex items-center gap-2 drop-shadow-md">
-                                {isLeader && <span className="text-yellow-400 animate-bounce">👑</span>}
-                                {faction.name}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
+                                <div aria-hidden className="px-notch relative h-8 border-4 border-frame-strong bg-screen p-[3px] sm:h-10">
+                                    <div
+                                        className={`relative h-full ${faction.color} transition-[width] duration-700 [transition-timing-function:steps(14,end)]`}
+                                        style={{ width: `${progress}%` }}
+                                    >
+                                        {/* The racer: a light block at the front of the bar */}
+                                        <span className="absolute inset-y-0 right-0 w-2 bg-px-snow/80" />
+                                    </div>
+                                    {/* Finish line */}
+                                    <span className="absolute inset-y-0 right-0 w-2 bg-[repeating-linear-gradient(to_bottom,var(--px-5)_0_4px,var(--px-0)_4px_8px)] opacity-60" />
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ol>
+            )}
+        </section>
     );
 }

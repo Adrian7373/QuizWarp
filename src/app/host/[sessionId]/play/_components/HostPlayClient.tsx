@@ -1,23 +1,32 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { endSessionEarly } from "@/app/actions";
-import { ChevronRight, Trophy, Loader2, Timer, BarChart3 } from "lucide-react";
+import { ChevronRight, Eye, Loader2, Trophy } from "lucide-react";
 import toast from "react-hot-toast";
 import { updateQuestionIndex } from "../../actions";
 import { createClient } from "@/utils/supabase/client";
+import Dialog from "@/app/_components/arcade/Dialog";
+import { playSfx } from "@/app/_components/arcade/sfx";
 import FactionRaceTrack from "./FactionRaceTrack";
+import { HostShell, HostTopBar, Kbd } from "../../_components/HostBits";
+import {
+    AnsweredCounter, HostOption, HostTimer, Leaderboard, RoundResult,
+    kindOf, typeChipOf, type HostParticipant, type HostQuestion,
+} from "./HostPlayBits";
 
 interface HostPlayClientProps {
     sessionId: string;
     quizTitle: string;
-    questions: any[];
+    questions: HostQuestion[];
     initialIndex: number;
-    hostId: string;
 }
 
-export default function HostPlayClient({ sessionId, quizTitle, questions, initialIndex, hostId }: HostPlayClientProps) {
+/** Keys that drive the host's main action, when focus isn't on a control that handles them itself. */
+const PRIMARY_KEYS = new Set([" ", "Enter", "n", "N", "ArrowRight"]);
+
+export default function HostPlayClient({ sessionId, quizTitle, questions, initialIndex }: HostPlayClientProps) {
     const router = useRouter();
     const supabase = createClient();
 
@@ -25,14 +34,23 @@ export default function HostPlayClient({ sessionId, quizTitle, questions, initia
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
     const [isAdvancing, setIsAdvancing] = useState(false);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
-
+    const [confirmEnd, setConfirmEnd] = useState(false);
+    const [announcement, setAnnouncement] = useState("");
 
     const [viewState, setViewState] = useState<"QUESTION" | "STANDINGS">("QUESTION");
 
-
-    const [participants, setParticipants] = useState<any[]>([]);
-    const [factions, setFactions] = useState<any[]>([]);
+    const [participants, setParticipants] = useState<HostParticipant[]>([]);
+    const [factions, setFactions] = useState<{ id: string; name: string }[]>([]);
     const [maxFactions, setMaxFactions] = useState(0);
+
+    // Who answered this question, derived from the score updates the standings already listen to:
+    // every answer saves a Participant row. `baseline` holds each score when the question opened.
+    const [round, setRound] = useState<{ index: number; ids: string[] }>({ index: initialIndex, ids: [] });
+    const [baseline, setBaseline] = useState<Record<string, number>>({});
+    const participantsRef = useRef<HostParticipant[]>([]);
+    const indexRef = useRef(initialIndex);
+    useEffect(() => { participantsRef.current = participants; }, [participants]);
+    useEffect(() => { indexRef.current = currentIndex; }, [currentIndex]);
 
     const currentQuestion = questions[currentIndex];
     const isLastQuestion = currentIndex === questions.length - 1;
@@ -52,7 +70,15 @@ export default function HostPlayClient({ sessionId, quizTitle, questions, initia
 
             // Get Initial Participants
             const { data: participantData } = await supabase.from('Participant').select('*').eq('sessionId', sessionId);
-            if (participantData) setParticipants(participantData);
+            if (participantData) {
+                const list = participantData as HostParticipant[];
+                setParticipants(list);
+                setBaseline(prev => {
+                    const next = { ...prev };
+                    for (const p of list) if (!(p.id in next)) next[p.id] = p.totalScore;
+                    return next;
+                });
+            }
         };
 
         fetchInitialData();
@@ -63,7 +89,19 @@ export default function HostPlayClient({ sessionId, quizTitle, questions, initia
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'Participant', filter: `sessionId=eq.${sessionId}` },
                 (payload) => {
-                    setParticipants(prev => prev.map(p => p.id === payload.new.id ? payload.new : p));
+                    const next = payload.new as HostParticipant;
+                    const prev = participantsRef.current.find(p => p.id === next.id);
+
+                    // A faction change alone is not an answer; anything else on this row is.
+                    const factionOnly = prev && prev.factionId !== next.factionId && prev.totalScore === next.totalScore;
+                    if (!factionOnly) {
+                        const idx = indexRef.current;
+                        setRound(r => r.index !== idx ? { index: idx, ids: [next.id] } : r.ids.includes(next.id) ? r : { index: idx, ids: [...r.ids, next.id] });
+                    }
+                    if (!prev) setBaseline(b => (next.id in b ? b : { ...b, [next.id]: 0 }));
+
+                    // Players who joined after the page loaded are added instead of dropped.
+                    setParticipants(list => list.some(p => p.id === next.id) ? list.map(p => p.id === next.id ? next : p) : [...list, next]);
                 }
             )
             .subscribe();
@@ -100,8 +138,22 @@ export default function HostPlayClient({ sessionId, quizTitle, questions, initia
         return () => clearInterval(timer);
     }, [timeLeft, isAdvancing, viewState]);
 
-    const handleNextQuestion = async () => {
-        if (isLastQuestion) return;
+    // Round numbers
+    const answeredIds = round.index === currentIndex ? round.ids : [];
+    const total = participants.length;
+    const answered = Math.min(answeredIds.length, total || answeredIds.length);
+    const gainOf = (p: HostParticipant) => p.totalScore - (baseline[p.id] ?? p.totalScore);
+    const answeredSet = new Set(answeredIds);
+    const correctCount = participants.filter(p => answeredSet.has(p.id) && gainOf(p) > 0).length;
+    const wrongCount = participants.filter(p => answeredSet.has(p.id)).length - correctCount;
+
+    const revealAnswer = useCallback(() => {
+        playSfx("select");
+        setViewState("STANDINGS");
+    }, []);
+
+    const handleNextQuestion = useCallback(async () => {
+        if (isLastQuestion || isAdvancing) return;
 
         setIsAdvancing(true);
         const nextIndex = currentIndex + 1;
@@ -111,149 +163,245 @@ export default function HostPlayClient({ sessionId, quizTitle, questions, initia
         if (response.error) {
             toast.error(response.error);
         } else {
+            // New round: snapshot scores so this question's points can be told apart.
+            setBaseline(Object.fromEntries(participantsRef.current.map(p => [p.id, p.totalScore])));
+            setRound({ index: nextIndex, ids: [] });
             setCurrentIndex(nextIndex);
             setViewState("QUESTION"); // Flip back to the question view
+            playSfx("start");
         }
         setIsAdvancing(false);
-    };
+    }, [currentIndex, isAdvancing, isLastQuestion, sessionId]);
 
-    const handleEndGame = async () => {
+    const handleEndGame = useCallback(async () => {
         setIsAdvancing(true);
-        const response = await endSessionEarly(sessionId, hostId);
+        const response = await endSessionEarly(sessionId);
 
         if (response.error) {
             toast.error(response.error);
             setIsAdvancing(false);
         } else {
+            playSfx("levelup");
             toast.success("Game Finished!");
             router.push(`/dashboard/reports/${sessionId}`);
         }
-    };
+    }, [router, sessionId]);
+
+    const primaryAction = viewState === "QUESTION" ? revealAnswer : !isLastQuestion ? handleNextQuestion : handleEndGame;
+
+    // Announce each new question and each reveal to screen readers.
+    useEffect(() => {
+        if (!currentQuestion) return;
+        setAnnouncement(`Question ${currentIndex + 1} of ${questions.length}: ${currentQuestion.questionText}`);
+    }, [currentIndex, currentQuestion, questions.length]);
+
+    useEffect(() => {
+        if (viewState !== "STANDINGS" || !currentQuestion) return;
+        setAnnouncement(`Answer revealed: ${currentQuestion.correctAnswer}.`);
+    }, [viewState, currentQuestion]);
+
+    const everyoneIn = total > 0 && answered >= total;
+    useEffect(() => {
+        if (everyoneIn && viewState === "QUESTION") setAnnouncement("Everyone has answered.");
+    }, [everyoneIn, viewState]);
+
+    // Host keyboard: Space, Enter, N or Right arrow runs the main action; E opens End game.
+    useEffect(() => {
+        function onKey(e: KeyboardEvent) {
+            if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || confirmEnd || isAdvancing) return;
+            const el = e.target as HTMLElement | null;
+            if (el?.closest("input, textarea, select, [contenteditable='true'], [role='dialog']")) return;
+            // Space and Enter already press a focused button or link: let them.
+            if ((e.key === " " || e.key === "Enter") && el?.closest("button, a, summary")) return;
+            if (PRIMARY_KEYS.has(e.key)) {
+                e.preventDefault();
+                void primaryAction();
+            } else if (e.key === "e" || e.key === "E") {
+                e.preventDefault();
+                setConfirmEnd(true);
+            }
+        }
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [confirmEnd, isAdvancing, primaryAction]);
+
+    const liveRegion = <p className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</p>;
+
+    if (!currentQuestion) {
+        return (
+            <HostShell>
+                <HostTopBar quizTitle={quizTitle} />
+                <div className="px-panel flex flex-1 flex-col items-center justify-center gap-5 p-8 text-center">
+                    <h1 className="px-title text-lg sm:text-xl">No question to show</h1>
+                    <p className="max-w-[44ch] text-lg text-muted">This quiz has no question at this step. End the game to see the report.</p>
+                    <button type="button" onClick={handleEndGame} disabled={isAdvancing} data-sfx="none" className="px-btn px-btn-lg px-btn-yellow">
+                        {isAdvancing ? <Loader2 className="size-5 animate-spin" aria-hidden /> : <Trophy className="size-5" aria-hidden />}
+                        End game
+                    </button>
+                </div>
+            </HostShell>
+        );
+    }
+
+    const kind = kindOf(currentQuestion);
+    const options = currentQuestion.options ?? [];
+    const chip = typeChipOf(currentQuestion);
+    const limit = currentQuestion.timeLimitSeconds ?? null;
+    const revealed = viewState === "STANDINGS";
+
+    const standingsRows = [...participants]
+        .sort((a, b) => b.totalScore - a.totalScore)
+        .slice(0, 10)
+        .map(p => ({ id: p.id, nickname: p.nickname, score: p.totalScore, gain: gainOf(p) }));
+
+    const optionGrid = (size: "lg" | "md") => (
+        <ul className={`grid gap-3 ${options.length > 2 ? "md:grid-cols-2" : options.length === 2 ? "sm:grid-cols-2" : ""}`} aria-label="Answers">
+            {options.map((option, idx) => (
+                <HostOption
+                    key={idx}
+                    index={idx}
+                    text={option}
+                    size={size}
+                    state={!revealed ? "idle" : option === currentQuestion.correctAnswer ? "correct" : "dim"}
+                />
+            ))}
+        </ul>
+    );
+
+    const typedAnswer = (
+        <div className="px-notch flex flex-col gap-2 border-4 border-px-lime bg-screen px-4 py-3 sm:px-5 sm:py-4">
+            <span className="px-label text-px-lime">{kind === "essay" ? "What a good answer covers" : "Answer"}</span>
+            <p className={`whitespace-pre-wrap font-semibold ${kind === "essay" ? "text-lg sm:text-xl" : "text-2xl sm:text-3xl"}`}>{currentQuestion.correctAnswer}</p>
+        </div>
+    );
+
+    // Primary button: the one yellow action on screen.
+    const primary = viewState === "QUESTION"
+        ? { label: "Reveal answer", icon: <Eye className="size-5" aria-hidden /> }
+        : !isLastQuestion
+            ? { label: "Next question", icon: <ChevronRight className="size-5" aria-hidden /> }
+            : { label: "Show final podium", icon: <Trophy className="size-5" aria-hidden /> };
 
     return (
-        <div className="min-h-screen bg-slate-900 flex flex-col font-inter">
-            {/* Top Bar */}
-            <div className="bg-slate-800 p-4 flex justify-between items-center shadow-md shrink-0">
-                <h1 className="text-xl font-bold text-white">{quizTitle}</h1>
+        <HostShell>
+            <HostTopBar quizTitle={quizTitle}>
+                <span className="px-notch shrink-0 bg-px-void px-2 py-1.5 font-pixel text-[10px] text-px-snow sm:text-xs">
+                    Q{currentIndex + 1}<span className="opacity-60">/{questions.length}</span>
+                </span>
+            </HostTopBar>
+            {liveRegion}
 
-                {timeLeft !== null && viewState === "QUESTION" && (
-                    <div className="flex items-center gap-2 bg-rose-500/20 text-rose-400 px-4 py-2 rounded-full font-bold border border-rose-500/30">
-                        <Timer className="w-5 h-5" />
-                        <span className="text-xl">{timeLeft}s</span>
-                    </div>
-                )}
-
-                <div className="bg-slate-700 px-4 py-2 rounded-full text-slate-300 font-bold text-sm">
-                    Question {currentIndex + 1} of {questions.length}
-                </div>
-            </div>
-
-            {/* Main Stage */}
-            <div className="flex-1 flex flex-col p-6 max-w-5xl mx-auto w-full">
-
-                {viewState === "QUESTION" ? (
-                    // ----------------------------------------------------
-                    // VIEW A: THE QUESTION
-                    // ----------------------------------------------------
-                    <div className="bg-white rounded-2xl shadow-xl p-8 md:p-12 mb-8 flex-1 flex flex-col justify-center items-center text-center animate-in fade-in slide-in-from-bottom-4">
-                        <h2 className="text-3xl md:text-5xl font-black text-slate-800 mb-8">
-                            {currentQuestion.questionText}
-                        </h2>
-
-                        <div className={`grid gap-4 w-full ${currentQuestion.options?.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                            {currentQuestion.options?.map((option: string, idx: number) => (
-                                <div
-                                    key={idx}
-                                    className={`p-4 rounded-xl font-bold text-lg border-2 ${option === currentQuestion.correctAnswer
-                                        ? 'bg-emerald-100 border-emerald-500 text-emerald-800'
-                                        : 'bg-slate-50 border-slate-200 text-slate-600'
-                                        }`}
-                                >
-                                    {option}
-                                    {option === currentQuestion.correctAnswer && " (Correct)"}
-                                </div>
-                            ))}
+            {!revealed ? (
+                // ----------------------------------------------------
+                // VIEW A: THE QUESTION (no hint of the right answer: this screen is projected)
+                // ----------------------------------------------------
+                <main className="flex flex-1 flex-col gap-4 sm:gap-6">
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                        <span className={`px-notch px-2 py-1.5 font-pixel text-[10px] text-px-void sm:text-xs ${chip.fill}`}>{chip.label}</span>
+                        <div className="ml-auto">
+                            <AnsweredCounter answered={answered} total={total} />
                         </div>
                     </div>
-                ) : (
-                    // ----------------------------------------------------
-                    // VIEW B: THE STANDINGS (Race Track or Solo)
-                    // ----------------------------------------------------
-                    <div className="mb-8 flex-1 flex flex-col justify-center animate-in fade-in zoom-in duration-500">
+                    {limit && timeLeft !== null ? (
+                        <HostTimer timeLeft={timeLeft} limit={limit} />
+                    ) : (
+                        <p className="px-label text-muted">No time limit</p>
+                    )}
+
+                    <section className="px-panel flex min-h-40 flex-1 items-center justify-center p-5 text-center sm:min-h-56 sm:p-10">
+                        <h1 className="max-w-[40ch] text-balance text-[clamp(1.75rem,3.4vw,4rem)] font-semibold leading-tight">
+                            {currentQuestion.questionText}
+                        </h1>
+                    </section>
+
+                    {kind === "choice" ? optionGrid("lg") : (
+                        <p className="px-notch border-4 border-dashed border-frame-strong px-4 py-4 text-center text-xl text-muted">
+                            {kind === "essay" ? "Players write their answer. Orbi grades it out of 10." : "Players type their answer."}
+                        </p>
+                    )}
+                </main>
+            ) : (
+                // ----------------------------------------------------
+                // VIEW B: THE REVEAL + STANDINGS (Race Track or Solo)
+                // ----------------------------------------------------
+                <main className="grid flex-1 items-start gap-4 sm:gap-6 lg:grid-cols-12">
+                    <div className="flex flex-col gap-4 sm:gap-5 lg:col-span-7" style={{ animation: "host-pop 180ms steps(3, end)" }}>
+                        <section className="px-panel flex flex-col gap-3 p-4 sm:p-6">
+                            <span className={`px-notch self-start px-2 py-1 font-pixel text-[10px] text-px-void ${chip.fill}`}>{chip.label}</span>
+                            <h1 className="text-balance text-2xl font-semibold leading-snug sm:text-3xl xl:text-4xl">{currentQuestion.questionText}</h1>
+                        </section>
+                        {kind === "choice" ? optionGrid("md") : typedAnswer}
+                        {currentQuestion.explanation && (
+                            <p className="px-notch border-4 border-frame bg-screen px-4 py-3 text-lg leading-relaxed text-muted">
+                                <span className="font-semibold text-fg">Why: </span>{currentQuestion.explanation}
+                            </p>
+                        )}
+                        <RoundResult correct={correctCount} wrong={wrongCount} total={total} essay={kind === "essay"} />
+                    </div>
+                    <div className="lg:col-span-5">
                         {maxFactions > 0 ? (
                             <FactionRaceTrack factions={factions} participants={participants} />
                         ) : (
-                            <div className="bg-white rounded-3xl p-6 shadow-xl max-w-2xl mx-auto w-full">
-                                <h2 className="text-3xl font-black text-slate-800 mb-4 text-center">Top 10 Players</h2>
-                                <div className="flex flex-col gap-2">
-                                    {participants
-                                        .sort((a, b) => b.totalScore - a.totalScore)
-                                        .slice(0, 10)
-                                        .map((p, idx) => (
-                                            <div key={p.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border-2 border-slate-100">
-                                                <span className="font-bold text-lg text-slate-700">
-                                                    {idx === 0 ? "🥇 " : idx === 1 ? "🥈 " : idx === 2 ? "🥉 " : `${idx + 1}. `}
-                                                    {p.nickname}
-                                                </span>
-                                                <span className="font-black text-xl text-[#4ce0a3]">{p.totalScore}</span>
-                                            </div>
-                                        ))
-                                    }
-                                </div>
-                            </div>
+                            <Leaderboard rows={standingsRows} />
                         )}
                     </div>
-                )}
+                </main>
+            )}
 
-                {/* Control Footer */}
-                <div className="flex justify-between items-center shrink-0 mt-4 w-full">
-                    {!isLastQuestion ? (
-                        <button
-                            onClick={() => {
-                                if (window.confirm("Are you sure you want to end this game early? All players will be sent to the final podium.")) {
-                                    handleEndGame();
-                                }
-                            }}
-                            disabled={isAdvancing}
-                            className="text-rose-500 hover:text-rose-400 font-bold px-4 py-2 transition-colors disabled:opacity-50"
-                        >
-                            End Game Early
-                        </button>
-                    ) : (
-                        <div></div>
-                    )}
-
-                    <div className="flex justify-end">
-                        {viewState === "QUESTION" ? (
-                            <button
-                                onClick={() => setViewState("STANDINGS")}
-                                className="bg-blue-500 hover:bg-blue-400 text-white text-2xl font-black px-10 py-5 rounded-xl shadow-xl transition-transform hover:scale-105 flex items-center gap-3"
-                            >
-                                <BarChart3 className="w-8 h-8" />
-                                View Standings
-                            </button>
-                        ) : !isLastQuestion ? (
-                            <button
-                                onClick={handleNextQuestion}
-                                disabled={isAdvancing}
-                                className="bg-indigo-500 hover:bg-indigo-400 text-white text-2xl font-black px-10 py-5 rounded-xl shadow-xl transition-transform hover:scale-105 flex items-center gap-3 disabled:opacity-70 disabled:hover:scale-100"
-                            >
-                                {isAdvancing ? <Loader2 className="w-8 h-8 animate-spin" /> : "Next Question"}
-                                {!isAdvancing && <ChevronRight className="w-8 h-8" />}
-                            </button>
-                        ) : (
-                            <button
-                                onClick={handleEndGame}
-                                disabled={isAdvancing}
-                                className="bg-emerald-500 hover:bg-emerald-400 text-white text-2xl font-black px-10 py-5 rounded-xl shadow-xl transition-transform hover:scale-105 flex items-center gap-3 disabled:opacity-70 disabled:hover:scale-100"
-                            >
-                                {isAdvancing ? <Loader2 className="w-8 h-8 animate-spin" /> : <Trophy className="w-8 h-8" />}
-                                Show Final Podium
-                            </button>
-                        )}
-                    </div>
+            {/* Control footer */}
+            <footer className="sticky bottom-0 z-10 -mx-4 flex flex-col-reverse gap-3 border-t-4 border-frame bg-bg px-4 py-3 sm:-mx-6 sm:flex-row sm:items-center sm:justify-between sm:px-6 xl:-mx-10 xl:px-10">
+                <button
+                    type="button"
+                    onClick={() => setConfirmEnd(true)}
+                    disabled={isAdvancing}
+                    aria-keyshortcuts="E"
+                    className="px-btn px-btn-ghost w-full hover:[--btn:var(--px-7)] hover:[--btn-ink:var(--px-0)] sm:w-auto"
+                >
+                    End game <Kbd>E</Kbd>
+                </button>
+                <div className="flex items-center gap-4">
+                    <p className="hidden items-center gap-2 text-base text-muted lg:flex">
+                        <Kbd>Space</Kbd><Kbd>N</Kbd> {primary.label.toLowerCase()}
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => void primaryAction()}
+                        disabled={isAdvancing}
+                        aria-keyshortcuts="Space N Enter ArrowRight"
+                        data-sfx="none"
+                        className={`px-btn px-btn-lg px-btn-yellow w-full sm:w-auto ${everyoneIn && !revealed ? "px-hop" : ""}`}
+                    >
+                        {isAdvancing ? <Loader2 className="size-5 animate-spin" aria-hidden /> : primary.icon}
+                        {primary.label}
+                    </button>
                 </div>
-            </div>
-        </div>
+            </footer>
+
+            {confirmEnd && (
+                <Dialog
+                    title="End the game now?"
+                    onClose={() => setConfirmEnd(false)}
+                    locked={isAdvancing}
+                    size="sm"
+                    actions={
+                        <>
+                            <button type="button" onClick={() => setConfirmEnd(false)} disabled={isAdvancing} className="px-btn px-btn-ghost">
+                                Keep playing
+                            </button>
+                            <button type="button" onClick={handleEndGame} disabled={isAdvancing} data-sfx="none" className="px-btn px-btn-red">
+                                {isAdvancing && <Loader2 className="size-4 animate-spin" aria-hidden />}
+                                End game
+                            </button>
+                        </>
+                    }
+                >
+                    <p className="text-lg">
+                        {isLastQuestion
+                            ? "This is the last question. Players go to the final podium and you go to the report."
+                            : `${questions.length - currentIndex - 1} ${questions.length - currentIndex - 1 === 1 ? "question is" : "questions are"} left. Players go to the final podium and you go to the report.`}
+                    </p>
+                </Dialog>
+            )}
+        </HostShell>
     );
 }
