@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import { createClient } from "@/utils/supabase/server";
 import FlashcardClient from "./_components/FlashCardClient";
 
 interface StudyPageProps {
@@ -9,8 +10,13 @@ interface StudyPageProps {
 export default async function StudyPage({ params }: StudyPageProps) {
     const { quizId } = await params;
 
-    const quiz = await prisma.quiz.findUnique({
-        where: { id: quizId },
+    // Flashcards show every answer, so only the quiz's owner may open them.
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) notFound();
+
+    const quiz = await prisma.quiz.findFirst({
+        where: { id: quizId, creatorId: user.id },
         include: {
             questions: true
         }

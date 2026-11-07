@@ -24,19 +24,23 @@ export default async function QuizPage({ params }: QuizPageProps) {
         }
     }
 
-    const quizData = await prisma.quiz.findUnique({
-        where: {
-            id: quizId,
-            creatorId: user?.id,
-        },
-        select: {
-            id: true,
-            title: true,
-            description: true,
-            questions: true,
-            difficulty: true
-        },
-    });
+    // Only the owner may open a saved quiz. Never query without a signed-in user: Prisma ignores
+    // `creatorId: undefined`, which used to let logged-out visitors load any quiz (answers included).
+    const quizData = user
+        ? await prisma.quiz.findFirst({
+            where: {
+                id: quizId,
+                creatorId: user.id,
+            },
+            select: {
+                id: true,
+                title: true,
+                description: true,
+                questions: true,
+                difficulty: true
+            },
+        })
+        : null;
 
     return (
         <div className="px-crt min-h-dvh bg-bg font-sans text-fg print:min-h-0">
