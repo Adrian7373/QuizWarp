@@ -1,6 +1,7 @@
 "use server"
 import prisma from "@/lib/prisma";
 import { waitForDatabaseConnection } from "@/lib/prisma-connection";
+import { createClient } from "@/utils/supabase/server";
 import { Question } from "../_components/QuizModal";
 
 const baseUrl = process.env.PYTHON_AI_URL || 'http://127.0.0.1:5000';
@@ -360,9 +361,14 @@ export async function createLiveSession(quizId: string, hostId: string, maxFacti
 
 export async function generateClassInsight(sessionId: string) {
     try {
+        // Server actions are public endpoints: only the session's host may read or generate insights.
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { error: "Log in to generate insights." };
+
         // 1. Fetch the full game session with questions and all student responses
-        const session = await prisma.gameSession.findUnique({
-            where: { id: sessionId },
+        const session = await prisma.gameSession.findFirst({
+            where: { id: sessionId, hostId: user.id },
             include: {
                 quiz: {
                     include: { questions: true }
@@ -373,17 +379,15 @@ export async function generateClassInsight(sessionId: string) {
             }
         });
 
-        console.log(session);
-
         if (!session) return { error: "Session not found." };
         if (session.classInsight) return { success: true, insight: session.classInsight }; // Already generated
         if (session.participants.length === 0) return { error: "No student data to analyze." };
 
         // 2. Aggregate the math: Which questions were hardest?
-        const questionStats = session.quiz.questions.map(question => {
-            // Find all responses for THIS specific question
+        const questionStats = session.quiz.questions.map((question, index) => {
+            // Assignments save answers by question id, live games by question number.
             const responsesForQ = session.participants.flatMap(p =>
-                p.responses.filter(r => r.questionId === question.id)
+                p.responses.filter(r => r.questionId === question.id || r.questionId === String(index))
             );
 
             const totalAnswers = responsesForQ.length;
