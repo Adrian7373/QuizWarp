@@ -243,6 +243,12 @@
 }
 /* Spin: HoloOrb slides a strip of frames past a one-frame window (duration and steps set inline). */
 @keyframes px-strip { to { transform: translateX(-100%); } }
+/* Critters: two-frame walk cycle, a squash on landing, a hover wiggle */
+.critter[data-walking="true"] .critter-strip { animation: px-strip 0.36s steps(2, end) infinite; }
+.critter:hover .critter-strip { filter: brightness(1.15); }
+.critter[data-air="true"] .critter-strip { transform: translateX(-50%); }
+@media (prefers-reduced-motion: reduce) { .critter .critter-strip { animation: none !important; } }
+
 /* Music equalizer bars (MusicControl) */
 @keyframes px-eq { 0% { height: 30%; } 33% { height: 100%; } 66% { height: 55%; } 100% { height: 30%; } }
 @media (prefers-reduced-motion: reduce) {

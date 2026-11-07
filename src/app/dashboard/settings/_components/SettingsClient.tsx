@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, Loader2, LogOut, Lock, Mail, Save } from "lucide-react";
 import toast from "react-hot-toast";
@@ -13,6 +13,7 @@ import { CoinCounter, PixelBar, StreakFlame } from "@/app/_components/arcade/Hud
 import { applyTheme, useTheme, type Theme } from "@/app/_components/arcade/ThemeToggle";
 import { useSfxOn } from "@/app/_components/arcade/SoundToggle";
 import { playSfx, setSfxOn } from "@/app/_components/arcade/sfx";
+import { critterSubscribe, isCrittersOn, setCrittersOn } from "@/app/_components/arcade/critters/settings";
 
 export type Tab = "account" | "preferences" | "security" | "credits";
 type Role = "TEACHER" | "STUDENT";
@@ -81,6 +82,7 @@ export default function SettingsClient({ user, initialTab }: SettingsClientProps
 
     const theme = useTheme();
     const soundOn = useSfxOn();
+    const crittersOn = useSyncExternalStore(critterSubscribe, isCrittersOn, () => true);
 
     const trimmedName = name.trim();
     const nameError = trimmedName.length === 0 ? "Enter a display name." : trimmedName.length > 50 ? "Keep it to 50 characters or fewer." : "";
@@ -278,6 +280,20 @@ export default function SettingsClient({ user, initialTab }: SettingsClientProps
                                 <ChoiceCard checked={!soundOn} onSelect={() => setSound(false)} accent="border-px-cyan" label="Sound off">
                                     <span className="font-pixel text-xs">Off</span>
                                     <span className="text-base text-muted">Silent. Good for quiet classrooms.</span>
+                                </ChoiceCard>
+                            </div>
+                        </fieldset>
+
+                        <fieldset>
+                            <legend className="text-base font-semibold">Critters</legend>
+                            <div role="radiogroup" aria-label="Critters" className="mt-2 grid gap-3 sm:grid-cols-2">
+                                <ChoiceCard checked={crittersOn} onSelect={() => setCrittersOn(true)} accent="border-px-cyan" label="Critters on">
+                                    <span className="font-pixel text-xs">On</span>
+                                    <span className="text-base text-muted">Tiny pixel friends wander the screen and hop on buttons. Click one to say hi.</span>
+                                </ChoiceCard>
+                                <ChoiceCard checked={!crittersOn} onSelect={() => setCrittersOn(false)} accent="border-px-cyan" label="Critters off">
+                                    <span className="font-pixel text-xs">Off</span>
+                                    <span className="text-base text-muted">A calm screen with nothing moving.</span>
                                 </ChoiceCard>
                             </div>
                         </fieldset>
