@@ -249,6 +249,55 @@
 .critter[data-air="true"] .critter-strip { transform: translateX(-50%); }
 @media (prefers-reduced-motion: reduce) { .critter .critter-strip { animation: none !important; } }
 
+/* Side scenery: floating isles in the gutters beside the page column (scenery/SideScenery.tsx).
+   Hard-stop gradients draw the pixel patterns; every move is stepped. */
+.isle-hi { height: 4px; margin-inline: 4px; background: var(--px-a); }
+.isle-grass { height: 8px; background: var(--px-b); }
+.isle-fringe { height: 4px; background: linear-gradient(90deg, var(--px-b) 8px, var(--px-2) 0) 0 0 / 12px 4px; }
+.isle-dirt {
+  background:
+    linear-gradient(var(--px-2) 8px, transparent 0) 0 0 / 20px 12px,
+    linear-gradient(90deg, var(--px-3) 4px, var(--px-2) 0) 0 0 / 20px 12px;
+}
+.isle-on { position: absolute; bottom: calc(100% - 4px); }
+:is(.isle-on, .scenery-gem, .scenery-pip, .scenery-twinkle, .scenery-fly) > .px-sprite { display: block; }
+
+@keyframes px-twinkle { 50% { opacity: 0.2; } }
+@keyframes px-pop { to { transform: translateY(-48px); opacity: 0; } }
+@keyframes px-squish { 0% { transform: scaleY(0.5); } 25% { transform: scaleY(1.17); } 50%, 100% { transform: none; } }
+@keyframes px-jump {
+  12%, 87% { transform: translateY(-40px); }
+  25%, 75% { transform: translateY(-80px); }
+  37%, 62% { transform: translateY(-104px); }
+  50% { transform: translateY(-112px); }
+}
+@keyframes px-drift {
+  25% { transform: translate(12px, -8px); }
+  50% { transform: translate(20px, 4px); }
+  75% { transform: translate(8px, 12px); }
+}
+@keyframes px-rustle { 0% { transform: translateX(4px); } 50% { transform: translateX(-4px); } 100% { transform: none; } }
+
+/* Each gutter rests faded and still; the one the pointer is in wakes (SideScenery sets .is-awake). */
+.scenery-side { opacity: 0.28; transition: opacity 0.3s steps(3); }
+.scenery-side.is-awake { opacity: 1; }
+.is-awake .scenery-gem { animation: px-bob 1.2s steps(1) infinite; }
+.scenery-gem.is-got { animation: none; cursor: default; }
+.scenery-gem.is-got > .px-sprite { animation: px-pop 0.48s steps(4) forwards; }
+.is-awake .scenery-twinkle { animation: px-twinkle 2.4s steps(1) infinite; }
+.is-awake .scenery-fly { animation: px-drift 3.2s steps(1) infinite; }
+.is-awake .scenery-fly > .px-sprite { animation: px-twinkle 0.8s steps(1) infinite; }
+.scenery-spring > .px-sprite { transform-origin: 50% 100%; }
+.scenery-spring.is-boing > .px-sprite { animation: px-squish 0.76s steps(1); }
+.scenery-pip.is-boing { animation: px-jump 0.76s steps(1); }
+.scenery-rustle:hover > .px-sprite { animation: px-rustle 0.3s steps(1) 2; }
+/* A full-screen overlay (QuizModal) hides the scenery outright. Covered isles would still have a size, and the
+   critters, which sit above the overlay, would keep hopping onto platforms nobody can see. display:none gives the
+   isles an empty rect, so the critters' perch check skips them and anyone perched falls to the floor. */
+body:has([data-covers-scenery]) .scenery-layer { display: none !important; }
+/* White stars vanish on paper. */
+[data-theme="light"] .scenery-twinkle { display: none; }
+
 /* Music equalizer bars (MusicControl) */
 @keyframes px-eq { 0% { height: 30%; } 33% { height: 100%; } 66% { height: 55%; } 100% { height: 30%; } }
 @media (prefers-reduced-motion: reduce) {

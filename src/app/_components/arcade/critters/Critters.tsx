@@ -16,7 +16,7 @@ import { critterSubscribe, isCrittersOn } from './settings'
 const SCALE = 3
 const PX = CRITTER_SIZE * SCALE // on-screen size
 const GRAVITY = 1400 // px/s²
-const PERCH_SELECTOR = '.px-btn, .px-panel'
+const PERCH_SELECTOR = '.px-btn, .px-panel, .px-perch' // .px-perch: the side scenery's floating isles
 const HIDDEN_ON = [/^\/play\//, /^\/host\/[^/]+\/play/] // keep gameplay screens clear
 
 type Mode = 'floor' | 'perch' | 'air'

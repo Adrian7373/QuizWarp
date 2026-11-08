@@ -4,6 +4,7 @@ import { Orbitron, Press_Start_2P, Pixelify_Sans } from "next/font/google"
 import { Toaster } from 'react-hot-toast';
 import SfxListener from "./_components/arcade/SfxListener";
 import Critters from "./_components/arcade/critters/Critters";
+import SideScenery from "./_components/arcade/scenery/SideScenery";
 
 // Legacy logo wordmark on screens not yet on the arcade system.
 const orbitron = Orbitron({
@@ -53,6 +54,7 @@ export default function RootLayout({
       <body className="font-sans">
         {children}
         <SfxListener />
+        <SideScenery />
         <Critters />
         <Toaster position="bottom-right" reverseOrder={false} toastOptions={{ className: "px-toast" }} />
       </body>

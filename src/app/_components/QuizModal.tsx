@@ -476,7 +476,7 @@ export default function QuizModal({ isOpen, onClose, quizData, user }: QuizModal
     const minDue = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 top-16 z-[40] flex flex-col overflow-hidden bg-bg font-sans text-fg print:static print:block print:h-auto print:overflow-visible">
+        <div data-covers-scenery className="fixed bottom-0 left-0 right-0 top-16 z-[40] flex flex-col overflow-hidden bg-bg font-sans text-fg print:static print:block print:h-auto print:overflow-visible">
 
             {/* ===== TOOLBAR ===== */}
             <header className="z-40 shrink-0 border-b-4 border-frame bg-surface print:hidden">
