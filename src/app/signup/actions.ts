@@ -33,6 +33,7 @@ export async function signUp(formData: FormData) {
         options: {
             data: {
                 full_name: name,
+                role,
                 // Record of consent (DPA: be able to show when and to what the user agreed)
                 terms_accepted_at: new Date().toISOString(),
                 terms_version: LEGAL.version,

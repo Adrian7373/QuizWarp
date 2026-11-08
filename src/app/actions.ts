@@ -5,6 +5,7 @@ import { QuizData } from "./page";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
+import { ensureAppUser } from "@/lib/ensure-user";
 
 export async function getUser(userId: string) {
 
@@ -32,12 +33,20 @@ export async function getUser(userId: string) {
         })
 
         if (!user) {
-            return { error: "User not found." }
+            // Signed in with Supabase but no profile row yet: create it, then re-read.
+            const supabase = await createClient()
+            const { data: { user: authUser } } = await supabase.auth.getUser()
+            if (!authUser || authUser.id !== userId) {
+                return { error: "User not found." }
+            }
+            await ensureAppUser(authUser)
+            return getUser(userId)
         }
 
         return { user };
 
     } catch (error) {
+        console.error("getUser failed:", error)
         return { error: "Failed to get user information." }
     }
 }
