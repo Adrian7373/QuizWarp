@@ -198,13 +198,23 @@ PYTHON_AI_URL=http://127.0.0.1:5000
 - `NEXT_PUBLIC_SITE_URL` is used in auth redirects.
 - `PYTHON_AI_URL` points to the AI microservice that generates quizzes and grades answers.
 
+## Design system
+
+QuizWarp uses an arcade-style design system: a fixed 16-color palette, two pixel fonts, hard edges, and two mascots (Volt the hero and Orbi, the AI that builds your quizzes). Run the app and open `/designsystem` to browse the full kit.
+
 ## Snapshots
 
-<img width="1916" height="911" alt="Screenshot 2026-10-13 205347" src="https://github.com/user-attachments/assets/1f7f5e7f-df6e-44c2-ac17-d302b8c83da0" />
-<img width="1919" height="911" alt="Screenshot 2026-10-13 205402" src="https://github.com/user-attachments/assets/384f0a49-499a-4dfd-b60e-537c36fb4a1b" />
-<img width="1919" height="910" alt="Screenshot 2026-10-13 205434" src="https://github.com/user-attachments/assets/5ac1dd58-0b26-4f26-9aa5-ca71a1b34ee9" />
-<img width="1919" height="910" alt="Screenshot 2026-10-13 205504" src="https://github.com/user-attachments/assets/17ac724a-5698-481c-bc87-a047d1732fab" />
-<img width="1919" height="912" alt="Screenshot 2026-10-13 205527" src="https://github.com/user-attachments/assets/417e70d5-2b52-4832-bfa9-8a578c9c64dd" />
-<img width="1919" height="910" alt="Screenshot 2026-10-13 205548" src="https://github.com/user-attachments/assets/0211537c-cacd-48c6-bfde-2bdaf0dc5ff9" />
-<img width="1919" height="911" alt="Screenshot 2026-10-13 213233" src="https://github.com/user-attachments/assets/f88852c8-70fc-47d1-98e7-64daafe1192f" />
-<img width="1919" height="910" alt="Screenshot 2026-10-13 213301" src="https://github.com/user-attachments/assets/b1a74dce-f8ca-431d-8302-b8c676d2752b" />
+### Home
+![Home](docs/screenshots/home.png)
+
+### Log in
+![Log in](docs/screenshots/login.png)
+
+### Sign up
+![Sign up](docs/screenshots/signup.png)
+
+### Join a session
+![Join a session](docs/screenshots/join.png)
+
+### Design system
+![Design system](docs/screenshots/designsystem.png)
