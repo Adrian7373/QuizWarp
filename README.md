@@ -207,14 +207,25 @@ QuizWarp uses an arcade-style design system: a fixed 16-color palette, two pixel
 ### Home
 ![Home](docs/screenshots/home.png)
 
-### Log in
-![Log in](docs/screenshots/login.png)
+### Dashboard
+![Dashboard](docs/screenshots/dashboard.png)
 
-### Sign up
-![Sign up](docs/screenshots/signup.png)
+### Quiz
+![Quiz](docs/screenshots/quiz.png)
 
-### Join a session
-![Join a session](docs/screenshots/join.png)
+### Practice
+![Practice](docs/screenshots/practice.png)
+
+### Flashcard study
+![Flashcard question](docs/screenshots/study-question.png)
+![Flashcard answer](docs/screenshots/study-answer.png)
+
+### Question bank
+![Question bank](docs/screenshots/question-bank.png)
+
+### Session report
+![Report overview](docs/screenshots/report-overview.png)
+![Report scores](docs/screenshots/report-scores.png)
 
 ### Design system
 ![Design system](docs/screenshots/designsystem.png)
