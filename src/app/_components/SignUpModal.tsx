@@ -8,14 +8,15 @@ import { signUp } from "../signup/actions";
 import { signInWithProvider } from "../login/actions";
 import LoginModal from "./LoginModal";
 import { useFormStatus } from "react-dom";
+import { ConsentCheckboxes, ConsentHiddenInputs } from "./legal/ConsentCheckboxes";
 
-function SubmitButton() {
+function SubmitButton({ disabled = false }: { disabled?: boolean }) {
     const { pending } = useFormStatus();
 
     return (
         <button
             type="submit"
-            disabled={pending} // Disables the button while the server action runs
+            disabled={pending || disabled} // Disables the button while the server action runs or consent is missing
             className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors mt-4 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
             {pending ? "Sending Verification Email..." : "Sign Up"}
@@ -31,6 +32,9 @@ export default function SignupModal({ onClose }: SignUpProps) {
     const [isShowing, setIsShowing] = useState(false);
     const [selectedRole, setSelectedRole] = useState<"TEACHER" | "STUDENT">("TEACHER");
     const [isSigningIn, setIsSigningIn] = useState(true)
+    const [acceptedTerms, setAcceptedTerms] = useState(false);
+    const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+    const hasConsented = acceptedTerms && acceptedPrivacy;
 
     const handleToggleShow = () => {
         setIsShowing((prev) => !prev);
@@ -46,7 +50,7 @@ export default function SignupModal({ onClose }: SignUpProps) {
                 <div onClick={onClose} className="bg-black/50 z-[90] fixed inset-0 flex justify-center items-center w-full min-h-dvh">
                     <div
                         onClick={(event) => event.stopPropagation()}
-                        className="bg-dark p-10 flex flex-col justify-center w-full shadow-md mx-6 max-w-[500px] rounded-lg"
+                        className="bg-dark p-6 sm:p-10 flex flex-col justify-center w-full shadow-md mx-4 sm:mx-6 max-w-[500px] max-h-dvh overflow-y-auto rounded-lg"
                     >
                         <h1 className="text-center text-white text-xl font-semibold mb-6">
                             Sign Up to continue
@@ -118,7 +122,16 @@ export default function SignupModal({ onClose }: SignUpProps) {
                                 </button>
                             </div>
 
-                            <SubmitButton />
+                            <ConsentHiddenInputs terms={acceptedTerms} privacy={acceptedPrivacy} />
+                            <ConsentCheckboxes
+                                terms={acceptedTerms}
+                                privacy={acceptedPrivacy}
+                                onTermsChange={setAcceptedTerms}
+                                onPrivacyChange={setAcceptedPrivacy}
+                                className="mt-2"
+                            />
+
+                            <SubmitButton disabled={!hasConsented} />
                         </form>
 
                         {/* DIVIDER */}
@@ -130,6 +143,7 @@ export default function SignupModal({ onClose }: SignUpProps) {
 
                         {/* 2. SOCIAL OAUTH FORM */}
                         <form action={signInWithProvider} className="flex flex-col items-center gap-3">
+                            <ConsentHiddenInputs terms={acceptedTerms} privacy={acceptedPrivacy} />
                             <button
                                 type="submit"
                                 hidden
@@ -145,11 +159,17 @@ export default function SignupModal({ onClose }: SignUpProps) {
                                 type="submit"
                                 name="provider"
                                 value="google"
-                                className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors"
+                                disabled={!hasConsented}
+                                className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                             >
                                 <FcGoogle className="text-xl" />
                                 Sign up with Google
                             </button>
+                            {!hasConsented && (
+                                <p className="text-xs text-gray-300 text-center">
+                                    Tick both boxes above to continue.
+                                </p>
+                            )}
                         </form>
                         <div className="mt-4 text-center text-sm text-gray-300">
                             Already have an account?{" "}

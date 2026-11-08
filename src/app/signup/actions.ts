@@ -3,8 +3,14 @@ import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { headers } from "next/headers"
 import prisma from "@/lib/prisma"
+import { LEGAL } from "@/lib/legal"
 
 export async function signUp(formData: FormData) {
+    // Both agreements are required. The UI blocks submit, this blocks anything that bypasses it.
+    if (formData.get('acceptedTerms') !== 'on' || formData.get('acceptedPrivacy') !== 'on') {
+        redirect(`/signup?error=${encodeURIComponent('You must accept the Terms of Service and Privacy Policy to create an account')}`)
+    }
+
     const name = formData.get('name') as string
     const email = (formData.get('email') as string)?.trim().toLowerCase()
     const password = formData.get('password') as string
@@ -25,7 +31,12 @@ export async function signUp(formData: FormData) {
         email,
         password,
         options: {
-            data: { full_name: name },
+            data: {
+                full_name: name,
+                // Record of consent (DPA: be able to show when and to what the user agreed)
+                terms_accepted_at: new Date().toISOString(),
+                terms_version: LEGAL.version,
+            },
             emailRedirectTo: redirectTo
         }
     })

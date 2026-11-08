@@ -9,6 +9,7 @@ import Sprite from "./_components/arcade/Sprite";
 import { HERO, ICON_HOMEWORK, ICON_LIVE, ICON_REPORTS, ICON_STUDY } from "./_components/arcade/sprites";
 import { Orbi } from "./_components/arcade/Hud";
 import { QuestionCard } from "./_components/arcade/QuizBits";
+import LegalFooter from "./_components/legal/LegalFooter";
 
 export const metadata: Metadata = {
   title: 'QuizWarp | Turn Any Text Into an Assessment in Seconds',
@@ -148,6 +149,8 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        <LegalFooter />
 
       </main>
     </div>

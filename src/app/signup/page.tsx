@@ -7,9 +7,13 @@ import { FcGoogle } from "react-icons/fc";
 import Link from "next/link";
 import { signUp } from "./actions"; // Adjust path if needed
 import { signInWithProvider } from "../login/actions";
+import { ConsentCheckboxes, ConsentHiddenInputs } from "../_components/legal/ConsentCheckboxes";
 
 export default function SignupPage() {
     const [isShowing, setIsShowing] = useState(false);
+    const [acceptedTerms, setAcceptedTerms] = useState(false);
+    const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+    const hasConsented = acceptedTerms && acceptedPrivacy;
     const [selectedRole, setSelectedRole] = useState<"TEACHER" | "STUDENT">("TEACHER");
 
     const handleToggleShow = () => {
@@ -87,9 +91,18 @@ export default function SignupPage() {
                             Student
                         </button>
                     </div>
+                    <ConsentHiddenInputs terms={acceptedTerms} privacy={acceptedPrivacy} />
+                    <ConsentCheckboxes
+                        terms={acceptedTerms}
+                        privacy={acceptedPrivacy}
+                        onTermsChange={setAcceptedTerms}
+                        onPrivacyChange={setAcceptedPrivacy}
+                        className="mt-2"
+                    />
                     <button
                         type="submit"
-                        className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors mt-4"
+                        disabled={!hasConsented}
+                        className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors mt-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
                     >
                         Sign Up
                     </button>
@@ -111,6 +124,7 @@ export default function SignupPage() {
 
                 {/* 2. SOCIAL OAUTH FORM */}
                 <form action={signInWithProvider} className="flex flex-col items-center gap-3">
+                    <ConsentHiddenInputs terms={acceptedTerms} privacy={acceptedPrivacy} />
                     <button
                         type="submit"
                         name="provider"
@@ -126,7 +140,8 @@ export default function SignupPage() {
                         type="submit"
                         name="provider"
                         value="google"
-                        className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors"
+                        disabled={!hasConsented}
+                        className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                     >
                         <FcGoogle className="text-xl" />
                         Sign up with Google

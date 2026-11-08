@@ -5,6 +5,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { FaFacebook } from "react-icons/fa6";
 import { FcGoogle } from "react-icons/fc";
 import { signInWithProvider, login } from "./actions";
+import { ConsentCheckboxes, ConsentHiddenInputs } from "../_components/legal/ConsentCheckboxes";
 
 
 interface LoginPageProps {
@@ -19,14 +20,17 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
     const resolvedParams = use(searchParams);
 
     const [isShowing, setIsShowing] = useState(false);
+    const [acceptedTerms, setAcceptedTerms] = useState(false);
+    const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+    const hasConsented = acceptedTerms && acceptedPrivacy;
 
     const handleToggleShow = () => {
         setIsShowing((prev) => !prev);
     };
 
     return (
-        <div className="bg-darker flex justify-center items-center w-full h-dvh">
-            <div className="bg-dark p-10 flex flex-col justify-center shadow-md w-full mx-6 max-w-[500px] rounded-lg">
+        <div className="bg-darker flex justify-center items-center w-full min-h-dvh py-6">
+            <div className="bg-dark p-6 sm:p-10 flex flex-col justify-center shadow-md w-full mx-4 sm:mx-6 max-w-[500px] rounded-lg">
                 <h1 className="text-center text-white text-xl font-semibold mb-6">
                     Sign In
                 </h1>
@@ -89,9 +93,18 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
                         </button>
                     </div>
 
+                    <ConsentCheckboxes
+                        terms={acceptedTerms}
+                        privacy={acceptedPrivacy}
+                        onTermsChange={setAcceptedTerms}
+                        onPrivacyChange={setAcceptedPrivacy}
+                        className="mt-1"
+                    />
+
                     <button
                         type="submit"
-                        className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors mt-2"
+                        disabled={!hasConsented}
+                        className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors mt-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
                     >
                         Sign In
                     </button>
@@ -106,6 +119,7 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
 
                 {/* 2. SOCIAL OAUTH FORM */}
                 <form action={signInWithProvider} className="flex flex-col items-center gap-3">
+                    <ConsentHiddenInputs terms={acceptedTerms} privacy={acceptedPrivacy} />
                     <button
                         type="submit"
                         name="provider"
@@ -121,7 +135,8 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
                         type="submit"
                         name="provider"
                         value="google"
-                        className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors"
+                        disabled={!hasConsented}
+                        className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                     >
                         <FcGoogle className="text-xl" />
                         Continue with Google

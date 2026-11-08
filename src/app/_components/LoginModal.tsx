@@ -6,14 +6,15 @@ import { FaFacebook } from "react-icons/fa6";
 import { FcGoogle } from "react-icons/fc";
 import { login, signInWithProvider } from "../login/actions";
 import { useFormStatus } from "react-dom";
+import { ConsentCheckboxes, ConsentHiddenInputs } from "./legal/ConsentCheckboxes";
 
-function LoginSubmitButton() {
+function LoginSubmitButton({ disabled = false }: { disabled?: boolean }) {
     const { pending } = useFormStatus();
 
     return (
         <button
             type="submit"
-            disabled={pending}
+            disabled={pending || disabled}
             className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors mt-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
             {pending ? "Signing In..." : "Sign In"}
@@ -21,7 +22,7 @@ function LoginSubmitButton() {
     );
 }
 
-function SocialButton({ provider, children }: { provider: string, children: React.ReactNode }) {
+function SocialButton({ provider, children, disabled = false }: { provider: string, children: React.ReactNode, disabled?: boolean }) {
     const { pending } = useFormStatus();
 
     return (
@@ -29,7 +30,7 @@ function SocialButton({ provider, children }: { provider: string, children: Reac
             type="submit"
             name="provider"
             value={provider}
-            disabled={pending}
+            disabled={pending || disabled}
             className="flex items-center gap-2 bg-white text-black w-full justify-center py-3 rounded-sm font-semibold hover:bg-gray-200 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
             {pending ? "Connecting..." : children}
@@ -44,6 +45,9 @@ interface LoginModalProps {
 
 export default function LoginModal({ onClose, onCreateAccount }: LoginModalProps) {
     const [isShowing, setIsShowing] = useState(false);
+    const [acceptedTerms, setAcceptedTerms] = useState(false);
+    const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+    const hasConsented = acceptedTerms && acceptedPrivacy;
 
     return (
         <div
@@ -52,7 +56,7 @@ export default function LoginModal({ onClose, onCreateAccount }: LoginModalProps
         >
             <div
                 onClick={(event) => event.stopPropagation()}
-                className="bg-dark p-10 flex flex-col justify-center shadow-md w-full max-w-[500px] rounded-lg relative"
+                className="bg-dark p-6 sm:p-10 flex flex-col justify-center shadow-md w-full max-w-[500px] max-h-dvh overflow-y-auto rounded-lg relative"
             >
                 <button
                     type="button"
@@ -111,7 +115,15 @@ export default function LoginModal({ onClose, onCreateAccount }: LoginModalProps
                         </button>
                     </div>
 
-                    <LoginSubmitButton />
+                    <ConsentCheckboxes
+                        terms={acceptedTerms}
+                        privacy={acceptedPrivacy}
+                        onTermsChange={setAcceptedTerms}
+                        onPrivacyChange={setAcceptedPrivacy}
+                        className="mt-1"
+                    />
+
+                    <LoginSubmitButton disabled={!hasConsented} />
                 </form>
 
                 <div className="flex items-center py-4">
@@ -129,10 +141,17 @@ export default function LoginModal({ onClose, onCreateAccount }: LoginModalProps
                     */}
 
 
-                    <SocialButton provider="google">
+                    <ConsentHiddenInputs terms={acceptedTerms} privacy={acceptedPrivacy} />
+
+                    <SocialButton provider="google" disabled={!hasConsented}>
                         <FcGoogle className="text-xl" />
                         Continue with Google
                     </SocialButton>
+                    {!hasConsented && (
+                        <p className="text-xs text-gray-300 text-center">
+                            Tick both boxes above to continue.
+                        </p>
+                    )}
                 </form>
 
                 <div className="mt-4 text-center text-sm text-gray-300">

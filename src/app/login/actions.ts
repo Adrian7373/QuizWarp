@@ -2,7 +2,8 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
-import { headers } from "next/headers"
+import { cookies, headers } from "next/headers"
+import { CONSENT_COOKIE, LEGAL } from "@/lib/legal"
 
 export async function signInWithProvider(formData: FormData) {
     const provider = formData.get('provider') as 'google' | 'facebook'
@@ -10,6 +11,21 @@ export async function signInWithProvider(formData: FormData) {
     if (!provider) {
         redirect('/login?error=No provider selected')
     }
+
+    // OAuth can create a new account, so consent is required here too.
+    if (formData.get('acceptedTerms') !== 'on' || formData.get('acceptedPrivacy') !== 'on') {
+        redirect(`/login?error=${encodeURIComponent('You must accept the Terms of Service and Privacy Policy to continue')}`)
+    }
+
+    // Carry the consent across the Google redirect; the auth callback records it on the user.
+    const cookieStore = await cookies()
+    cookieStore.set(CONSENT_COOKIE, `${LEGAL.version}|${new Date().toISOString()}`, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 10,
+    })
 
     const supabase = await createClient()
     const origin = (await headers()).get('origin')
